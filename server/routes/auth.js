@@ -331,6 +331,9 @@ router.post('/hedera', async (req, res) => {
             type: 'hedera'
           }
         }
+      },
+      include: {
+        wallets: true
       }
     });
 
@@ -351,6 +354,9 @@ router.post('/hedera', async (req, res) => {
               isPrimary: true
             }
           }
+        },
+        include: {
+          wallets: true
         }
       });
 

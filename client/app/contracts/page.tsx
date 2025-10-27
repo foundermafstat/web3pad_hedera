@@ -199,7 +199,10 @@ const ContractsPage: React.FC = () => {
   };
 
   const getPlayerAddress = () => {
-    return session?.user?.blockchainAddress ? session.user.blockchainAddress : undefined;
+    // Get primary wallet address
+    const wallets = session?.user?.wallets || [];
+    const primaryWallet = wallets.find(w => w.isPrimary) || wallets[0];
+    return primaryWallet?.address || undefined;
   };
 
   if (loading) {

@@ -16,12 +16,19 @@ router.get('/profile/:username', async (req, res) => {
 				username: true,
 				displayName: true,
 				avatar: true,
-				blockchainAddress: true,
 				blockchainConnected: true,
 				level: true,
 				experience: true,
 				coins: true,
 				createdAt: true,
+				wallets: {
+					select: {
+						address: true,
+						type: true,
+						network: true,
+						isPrimary: true,
+					},
+				},
 			},
 		}).catch(() => null);
 
@@ -34,12 +41,19 @@ router.get('/profile/:username', async (req, res) => {
 					username: true,
 					displayName: true,
 					avatar: true,
-					blockchainAddress: true,
 					blockchainConnected: true,
 					level: true,
 					experience: true,
 					coins: true,
 					createdAt: true,
+					wallets: {
+						select: {
+							address: true,
+							type: true,
+							network: true,
+							isPrimary: true,
+						},
+					},
 				},
 			}).catch(() => null);
 		}

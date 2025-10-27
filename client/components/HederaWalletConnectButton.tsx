@@ -35,7 +35,20 @@ export function HederaWalletConnectButton({
       
       // Initialize and connect to wallet
       await hederaService.init(targetNetwork);
-      const walletData = await hederaService.connect();
+      
+      let walletData: any;
+      try {
+        walletData = await hederaService.connect();
+      } catch (connectError: any) {
+        // Handle proposal expired error
+        if (connectError?.message?.includes('Proposal expired') || 
+            connectError?.message?.includes('proposal expired')) {
+          if (onError) onError('Connection request expired. Please try connecting again.');
+          setLoading(false);
+          return;
+        }
+        throw connectError;
+      }
       
       if (!walletData) {
         if (onError) onError('Failed to connect Hedera wallet');
@@ -70,9 +83,19 @@ export function HederaWalletConnectButton({
       } else {
         if (onSuccess) onSuccess();
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Hedera authentication error:', err);
-      if (onError) onError('An error occurred. Please try again.');
+      
+      // Provide specific error messages
+      if (err?.message?.includes('Proposal expired') || 
+          err?.message?.includes('proposal expired')) {
+        if (onError) onError('Connection session expired. Please try again.');
+      } else if (err?.message?.includes('User rejected') || 
+                 err?.message?.includes('user rejected')) {
+        if (onError) onError('Connection cancelled by user.');
+      } else {
+        if (onError) onError('An error occurred. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

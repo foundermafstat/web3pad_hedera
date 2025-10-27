@@ -98,6 +98,13 @@ export class HederaService {
         throw new Error('Hedera Provider not initialized');
       }
       
+      // Clear any stale sessions before opening new modal
+      try {
+        await this.clearStaleSessions();
+      } catch (clearError) {
+        console.log('No sessions to clear or already cleared');
+      }
+      
       const session = await this.dAppConnector.openModal();
       this.currentSession = session;
       
@@ -119,9 +126,65 @@ export class HederaService {
       }
       
       return null;
-    } catch (error) {
+    } catch (error: any) {
+      // Handle "Proposal expired" error specifically
+      if (error?.message?.includes('Proposal expired') || error?.message?.includes('proposal expired')) {
+        console.warn('Session expired, clearing and retrying...');
+        await this.clearStaleSessions();
+        
+        // Retry connection after clearing
+        try {
+          const session = await this.dAppConnector.openModal();
+          this.currentSession = session;
+          
+          const walletConnectClient = (this.dAppConnector as any).walletConnectClient;
+          const accounts = walletConnectClient?.session?.get(session.topic)?.namespaces;
+          
+          if (accounts) {
+            const hederaAccounts = accounts.hedera?.accounts || [];
+            if (hederaAccounts.length > 0) {
+              const accountId = hederaAccounts[0];
+              console.log('Connected account after retry:', accountId);
+              return {
+                address: accountId,
+                network: this.currentNetwork
+              };
+            }
+          }
+        } catch (retryError) {
+          console.error('Error retrying connection:', retryError);
+        }
+      }
+      
       console.error('Error connecting Hedera wallet:', error);
-      return null;
+      throw error; // Re-throw to let caller handle it
+    }
+  }
+  
+  /**
+   * Clear any stale or expired sessions
+   */
+  private async clearStaleSessions(): Promise<void> {
+    if (!this.dAppConnector) return;
+    
+    try {
+      const walletConnectClient = (this.dAppConnector as any).walletConnectClient;
+      if (!walletConnectClient?.session) return;
+      
+      // Get all active sessions
+      const sessions = walletConnectClient.session.getAll();
+      
+      // Disconnect all sessions
+      for (const session of sessions) {
+        try {
+          await walletConnectClient.session.delete(session.topic, { message: 'Session expired' });
+        } catch (err) {
+          // Session might already be expired
+          console.log('Session already expired or disconnected');
+        }
+      }
+    } catch (error) {
+      console.log('No sessions to clear');
     }
   }
   
@@ -187,6 +250,9 @@ export class HederaService {
    */
   async disconnect(): Promise<boolean> {
     try {
+      // Clear all stale sessions first
+      await this.clearStaleSessions();
+      
       if (this.dAppConnector && this.currentSession) {
         // Disconnect all sessions only if there is an active session
         try {

@@ -12,18 +12,25 @@ interface SettingsTabProps {
 		username: string;
 		displayName: string;
 		avatar?: string;
-		walletAddress?: string | null;
-		blockchainAddress?: string | null;
 		blockchainConnected?: boolean;
+		wallets?: Array<{
+			address: string;
+			type: string;
+			network?: string;
+			isPrimary: boolean;
+		}>;
 	};
 }
 
 export function SettingsTab({ user }: SettingsTabProps) {
 	const [displayName, setDisplayName] = useState(user.displayName);
 	const [loading, setLoading] = useState(false);
-	const [walletAddress, setWalletAddress] = useState(user.walletAddress);
-	const [blockchainAddress, setBlockchainAddress] = useState(user.blockchainAddress);
+	const [wallets, setWallets] = useState(user.wallets || []);
 	const [blockchainConnected, setBlockchainConnected] = useState(user.blockchainConnected || false);
+	
+	// Get primary wallet address for display
+	const primaryWallet = wallets.find(w => w.isPrimary) || wallets[0];
+	const walletAddress = primaryWallet?.address || null;
 
 	const handleSave = async () => {
 		setLoading(true);
@@ -39,7 +46,12 @@ export function SettingsTab({ user }: SettingsTabProps) {
 				headers: {
 					'Content-Type': 'application/json',
 				},
-				body: JSON.stringify({ walletAddress: address }),
+				body: JSON.stringify({ 
+					address,
+					type: 'hedera',
+					network: 'testnet',
+					isPrimary: true 
+				}),
 			});
 
 			if (!response.ok) {
@@ -48,7 +60,9 @@ export function SettingsTab({ user }: SettingsTabProps) {
 			}
 
 			const data = await response.json();
-			setWalletAddress(data.user.walletAddress);
+			if (data.wallet) {
+				setWallets([...wallets, data.wallet]);
+			}
 		} catch (error) {
 			console.error('Error connecting wallet:', error);
 			throw error; // Re-throw to let the component handle the error
@@ -57,8 +71,16 @@ export function SettingsTab({ user }: SettingsTabProps) {
 
 	const handleWalletDisconnect = async () => {
 		try {
+			if (!primaryWallet) {
+				throw new Error('No wallet to disconnect');
+			}
+
 			const response = await fetch('/api/profile/wallet', {
 				method: 'DELETE',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({ walletId: primaryWallet.address }),
 			});
 
 			if (!response.ok) {
@@ -66,7 +88,7 @@ export function SettingsTab({ user }: SettingsTabProps) {
 				throw new Error(error.error || 'Failed to disconnect wallet');
 			}
 
-			setWalletAddress(null);
+			setWallets(wallets.filter(w => w.address !== primaryWallet?.address));
 		} catch (error) {
 			console.error('Error disconnecting wallet:', error);
 			throw error; // Re-throw to let the component handle the error
@@ -160,30 +182,6 @@ export function SettingsTab({ user }: SettingsTabProps) {
 				onWalletConnect={handleWalletConnect}
 				onWalletDisconnect={handleWalletDisconnect}
 			/>
-
-			{/* Blockchain Wallet Section */}
-			<div className="bg-card border border-border rounded-md p-6">
-				<h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-					<FaLayerGroup className="w-5 h-5" />
-					Blockchain
-				</h3>
-
-				<div className="space-y-4">
-					<p className="text-muted-foreground text-sm">
-						Connect your Leather or other Blockchain wallet to access blockchain features and Bitcoin Layer 2 functionality.
-					</p>
-					<BlockchainWalletAuth 
-						onSuccess={() => {
-							// Refresh the page to update user data
-							window.location.reload();
-						}}
-						onError={(error) => {
-							console.error('Wallet connection error:', error);
-						}}
-					/>
-				</div>
-			</div>
-
 
 			{/* Save Button */}
 			<Button onClick={handleSave} disabled={loading} className="w-full" size="lg">

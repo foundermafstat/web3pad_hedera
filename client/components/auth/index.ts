@@ -1,0 +1,2 @@
+export { BlockchainWalletAuth } from './BlockchainWalletAuth';
+

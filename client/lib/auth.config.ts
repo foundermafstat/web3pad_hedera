@@ -155,7 +155,7 @@ export const authConfig: NextAuthConfig = {
 						name: user.displayName,
 						username: user.username,
 						image: user.avatar,
-						walletAddress: user.walletAddress,
+						wallets: user.wallets || [],
 					};
 				} catch (error) {
 					console.error('[NextAuth] Leather auth error:', error);
@@ -240,7 +240,12 @@ export const authConfig: NextAuthConfig = {
 						name: user.displayName || user.username || `Hedera User`,
 						username: user.username,
 						image: user.avatar,
-						walletAddress: credentials.walletAddress,
+						wallets: user.wallets || [{
+							address: credentials.walletAddress,
+							type: 'hedera',
+							network: credentials.network,
+							isPrimary: true
+						}],
 						network: credentials.network,
 					};
 				} catch (error) {
@@ -339,7 +344,7 @@ export const authConfig: NextAuthConfig = {
 				token.email = user.email;
 				token.name = user.name; // Store display name in token
 				token.picture = user.image; // Store avatar in token
-				token.walletAddress = (user as any).walletAddress; // Store wallet address
+				token.wallets = (user as any).wallets || []; // Store wallets
 				token.displayName = (user as any).displayName || user.name; // Сохраняем displayName для совместимости
 				
 				// Отладка
@@ -360,7 +365,7 @@ export const authConfig: NextAuthConfig = {
 				(session.user as any).username = token.username;
 				(session.user as any).displayName = token.displayName; // Добавляем displayName в сессию
 				session.user.image = token.picture as string; // Set avatar from token
-				(session.user as any).walletAddress = token.walletAddress as string; // Set wallet address
+				(session.user as any).wallets = (token.wallets as any) || []; // Set wallets
 				
 				// Отладка
 				console.log('[NextAuth] Session user data:', {

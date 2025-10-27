@@ -9,9 +9,13 @@ interface ProfileHeaderProps {
 		experience: number;
 		coins: number;
 		createdAt: string;
-		walletAddress?: string | null;
-		blockchainAddress?: string | null;
 		blockchainConnected?: boolean;
+		wallets?: Array<{
+			address: string;
+			type: string;
+			network?: string;
+			isPrimary: boolean;
+		}>;
 	};
 	stats: {
 		totalGamesPlayed: number;

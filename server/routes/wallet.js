@@ -3,92 +3,109 @@ import prisma from '../lib/prisma.js';
 
 const router = express.Router();
 
-// Update user's wallet address
+// Add wallet to user
 router.post('/wallet', async (req, res) => {
     try {
-        const { userId, walletAddress } = req.body;
+        const { userId, address, type, network, isPrimary } = req.body;
         
-        // Basic auth check - in production you'd use proper JWT verification
-        const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({ error: 'Unauthorized' });
+        if (!userId || !address || !type) {
+            return res.status(400).json({ error: 'userId, address, and type are required' });
         }
 
-        const userIdFromAuth = authHeader.split(' ')[1];
-        if (userIdFromAuth !== userId) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
-
-        if (!walletAddress) {
-            return res.status(400).json({ error: 'Wallet address is required' });
-        }
-
-        // Validate wallet address format (basic Ethereum address check)
-        if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
-            return res.status(400).json({ error: 'Invalid wallet address format' });
-        }
-
-        // Check if wallet is already linked to another user
-        const existingUser = await prisma.user.findUnique({
-            where: { walletAddress: walletAddress.toLowerCase() },
-        });
-
-        if (existingUser && existingUser.id !== userId) {
-            return res.status(409).json({ 
-                error: 'This wallet is already linked to another account' 
-            });
-        }
-
-        // Update user's wallet address
-        const updatedUser = await prisma.user.update({
-            where: { id: userId },
-            data: { walletAddress: walletAddress.toLowerCase() },
-            select: {
-                id: true,
-                username: true,
-                displayName: true,
-                blockchainAddress: true,
+        // Check if wallet with same address and type already exists
+        const existingWallet = await prisma.wallet.findFirst({
+            where: {
+                address: address.toLowerCase(),
+                type: type.toLowerCase(),
             },
         });
 
-        res.json(updatedUser);
+        if (existingWallet) {
+            if (existingWallet.userId === userId) {
+                // Update existing wallet
+                const updatedWallet = await prisma.wallet.update({
+                    where: { id: existingWallet.id },
+                    data: {
+                        network,
+                        isPrimary: isPrimary || false,
+                    },
+                });
+                return res.json({ success: true, wallet: updatedWallet });
+            } else {
+                return res.status(409).json({ 
+                    error: 'This wallet is already linked to another account' 
+                });
+            }
+        }
+
+        // If this is primary, unset other primary wallets
+        if (isPrimary) {
+            await prisma.wallet.updateMany({
+                where: { userId },
+                data: { isPrimary: false },
+            });
+        }
+
+        // Create new wallet
+        const wallet = await prisma.wallet.create({
+            data: {
+                userId,
+                address: address.toLowerCase(),
+                type: type.toLowerCase(),
+                network,
+                isPrimary: isPrimary || false,
+            },
+        });
+
+        res.json({ success: true, wallet });
     } catch (error) {
-        console.error('Error updating wallet address:', error);
+        console.error('Error adding wallet:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });
 
-// Remove user's wallet address
-router.delete('/wallet', async (req, res) => {
+// Remove wallet from user
+router.delete('/wallet/:walletId', async (req, res) => {
     try {
-        const { userId } = req.body;
+        const { walletId } = req.params;
         
-        // Basic auth check
-        const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
-
-        const userIdFromAuth = authHeader.split(' ')[1];
-        if (userIdFromAuth !== userId) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
-
-        // Remove wallet address from user
-        const updatedUser = await prisma.user.update({
-            where: { id: userId },
-            data: { walletAddress: null },
-            select: {
-                id: true,
-                username: true,
-                displayName: true,
-                blockchainAddress: true,
-            },
+        // Find wallet
+        const wallet = await prisma.wallet.findUnique({
+            where: { id: walletId },
         });
 
-        res.json(updatedUser);
+        if (!wallet) {
+            return res.status(404).json({ error: 'Wallet not found' });
+        }
+
+        // Delete wallet
+        await prisma.wallet.delete({
+            where: { id: walletId },
+        });
+
+        res.json({ success: true });
     } catch (error) {
-        console.error('Error removing wallet address:', error);
+        console.error('Error removing wallet:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get user wallets
+router.get('/wallet/:userId', async (req, res) => {
+    try {
+        const { userId } = req.params;
+        
+        const wallets = await prisma.wallet.findMany({
+            where: { userId },
+            orderBy: [
+                { isPrimary: 'desc' },
+                { createdAt: 'desc' },
+            ],
+        });
+
+        res.json({ success: true, wallets });
+    } catch (error) {
+        console.error('Error fetching wallets:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 });

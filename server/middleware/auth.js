@@ -96,11 +96,18 @@ export async function getUserFromRequest(req) {
 				username: true,
 				displayName: true,
 				avatar: true,
-				blockchainAddress: true,
 				blockchainConnected: true,
 				level: true,
 				experience: true,
 				coins: true,
+				wallets: {
+					select: {
+						address: true,
+						type: true,
+						network: true,
+						isPrimary: true,
+					},
+				},
 			},
 		});
 

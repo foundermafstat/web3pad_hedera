@@ -9,20 +9,21 @@ export async function POST(request: NextRequest) {
 		}
 
 		const body = await request.json();
-		const { walletAddress } = body;
+		const { walletAddress, address, type, network, isPrimary } = body;
 
-		// Call server API to update wallet address
+		// Use new wallet format if provided, otherwise use legacy walletAddress
+		const walletData = address && type 
+			? { userId: session.user.id, address, type, network, isPrimary: isPrimary || false }
+			: { userId: session.user.id, address: walletAddress, type: 'hedera', network: 'testnet', isPrimary: true };
+
+		// Call server API to add wallet
 		const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001';
-		const response = await fetch(`${serverUrl}/api/profile/wallet`, {
+		const response = await fetch(`${serverUrl}/api/wallet/wallet`, {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
-				'Authorization': `Bearer ${session.user.id}`, // Pass user ID for auth
 			},
-			body: JSON.stringify({
-				userId: session.user.id,
-				blockchainAddress: walletAddress,
-			}),
+			body: JSON.stringify(walletData),
 		});
 
 		if (!response.ok) {
@@ -33,10 +34,10 @@ export async function POST(request: NextRequest) {
 			);
 		}
 
-		const userData = await response.json();
+		const data = await response.json();
 		return NextResponse.json({
 			success: true,
-			user: userData,
+			wallet: data.wallet,
 		});
 	} catch (error) {
 		console.error('Error updating wallet address:', error);
@@ -54,17 +55,20 @@ export async function DELETE(request: NextRequest) {
 			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 		}
 
-		// Call server API to remove wallet address
+		const body = await request.json().catch(() => ({}));
+		const { walletId } = body;
+
+		if (!walletId) {
+			return NextResponse.json({ error: 'walletId is required' }, { status: 400 });
+		}
+
+		// Call server API to remove wallet
 		const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001';
-		const response = await fetch(`${serverUrl}/api/profile/wallet`, {
+		const response = await fetch(`${serverUrl}/api/wallet/wallet/${walletId}`, {
 			method: 'DELETE',
 			headers: {
 				'Content-Type': 'application/json',
-				'Authorization': `Bearer ${session.user.id}`, // Pass user ID for auth
 			},
-			body: JSON.stringify({
-				userId: session.user.id,
-			}),
 		});
 
 		if (!response.ok) {
@@ -75,10 +79,9 @@ export async function DELETE(request: NextRequest) {
 			);
 		}
 
-		const userData = await response.json();
+		const data = await response.json();
 		return NextResponse.json({
 			success: true,
-			user: userData,
 		});
 	} catch (error) {
 		console.error('Error removing wallet address:', error);
