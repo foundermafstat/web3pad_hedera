@@ -1,0 +1,64 @@
+# Dependencies
+node_modules/
+client/node_modules/
+
+# Production
+client/.next/
+client/out/
+client/pnpm-lock.yaml
+build/
+dist/
+
+server/pnpm-lock.yaml
+pnpm-lock.yaml
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*
+
+
+
+# Test files with sensitive data
+test-server-connection.js
+test-shooter-connection.js
+
+# Example files (keep in repo)
+!test-server-connection.example.js
+!test-shooter-connection.example.js
+
+# PM2
+.pm2/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+coverage/
+
+# Temporary files
+*.tmp
+*.bak
+
+# Backup archives
+backup-*.tar.gz
