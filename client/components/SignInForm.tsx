@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { Button } from './ui/button';
+import { HederaWalletConnectButton } from './HederaWalletConnectButton';
 
 interface SignInFormProps {
 	onSuccess: () => void;
@@ -125,18 +126,16 @@ export function SignInForm({ onSuccess, onError }: SignInFormProps) {
 					Continue with GitHub
 				</Button>
 
-				<Button
-					type="button"
-					variant="outline"
+				<HederaWalletConnectButton
 					className="w-full"
-					
-					
+					onSuccess={onSuccess}
+					onError={onError}
 				>
 					<svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
-						<path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h9zM12 16h10V8H12v8zm4-2.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
+						<path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.328l7.377 3.68-2.717 1.37-4.66-2.332v4.665l-4.66 2.332L4.623 10.08 12 6.328zm0 9.344l4.66-2.332v-4.665l-4.66 2.332-4.66-2.332v4.665L12 15.672z" />
 					</svg>
-					Connect Wallet
-				</Button>
+					Connect with Hedera
+				</HederaWalletConnectButton>
 			</div>
 
 			{/* Divider */}

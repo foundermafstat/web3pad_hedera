@@ -89,8 +89,8 @@ export const authConfig: NextAuthConfig = {
 			},
 		}),
 		Credentials({
-			id: 'leather',
-			name: 'Leather',
+			id: 'blockchain',
+			name: 'Blockchain',
 			credentials: {
 				walletAddress: { label: 'Wallet Address', type: 'text' },
 				signature: { label: 'Signature', type: 'text' },
@@ -159,6 +159,92 @@ export const authConfig: NextAuthConfig = {
 					};
 				} catch (error) {
 					console.error('[NextAuth] Leather auth error:', error);
+					return null;
+				}
+			},
+		}),
+		Credentials({
+			id: 'hedera',
+			name: 'Hedera Wallet',
+			credentials: {
+				walletAddress: { label: 'Hedera Account ID', type: 'text' },
+				signature: { label: 'Signature', type: 'text' },
+				message: { label: 'Message', type: 'text' },
+				network: { label: 'Network', type: 'text' },
+			},
+			async authorize(credentials) {
+				if (!credentials?.walletAddress || !credentials?.signature || !credentials?.message || !credentials?.network) {
+					console.error('[NextAuth] Missing Hedera credentials');
+					return null;
+				}
+
+				// Validate Hedera address format
+				try {
+					if (!isValidHederaAddress(credentials.walletAddress as string)) {
+						console.error('[NextAuth] Invalid Hedera address format:', credentials.walletAddress);
+						return null;
+					}
+				} catch (error) {
+					console.error('[NextAuth] Invalid Hedera address:', error);
+					return null;
+				}
+
+				try {
+					console.log('[NextAuth] Attempting Hedera wallet authentication...', {
+						walletAddress: credentials.walletAddress,
+						network: credentials.network,
+						hasSignature: !!credentials.signature,
+						messageLength: credentials.message ? (credentials.message as string).length : 0
+					});
+
+					// Verify signature on server
+					const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://web3pad.xyz/api';
+					const apiUrl = baseUrl.endsWith('/api') ? baseUrl : `${baseUrl}/api`;
+					const response = await fetch(
+						`${apiUrl}/auth/hedera`,
+						{
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								walletAddress: credentials.walletAddress,
+								signature: credentials.signature,
+								message: credentials.message,
+								network: credentials.network,
+							}),
+						}
+					);
+
+					console.log('[NextAuth] Hedera auth response status:', response.status);
+
+					if (!response.ok) {
+						const errorText = await response.text();
+						console.error('[NextAuth] Hedera auth server error:', errorText);
+						return null;
+					}
+
+					const responseData = await response.json();
+					console.log('[NextAuth] Hedera auth response:', responseData);
+					
+					// Server returns { success: true, data: user }
+					const user = responseData.data || responseData;
+					
+					console.log('[NextAuth] Hedera user data received:', {
+						id: user?.id,
+						email: user?.email || null,
+						username: user?.username
+					});
+
+					return {
+						id: user.id,
+						email: user.email || `hedera_${credentials.walletAddress}@hedera.local`,
+						name: user.displayName || user.username || `Hedera User`,
+						username: user.username,
+						image: user.avatar,
+						walletAddress: credentials.walletAddress,
+						network: credentials.network,
+					};
+				} catch (error) {
+					console.error('[NextAuth] Hedera auth error:', error);
 					return null;
 				}
 			},
@@ -299,5 +385,13 @@ function isValidBlockchainAddress(address: string): boolean {
 	// Простая проверка, чтобы избежать ошибки линтера
 	// Можно реализовать более сложную валидацию
 	return address.length > 10 && address.startsWith('0x');
+}
+
+function isValidHederaAddress(address: string): boolean {
+	// Check Hedera address format (0.0.12345 or hedera:network:0.0.12345)
+	const cleanAddress = address.startsWith('hedera:') 
+		? address.split(':').slice(2).join(':') 
+		: address;
+	return /^\d+\.\d+\.\d+$/.test(cleanAddress);
 }
 

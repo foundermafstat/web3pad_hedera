@@ -2,10 +2,12 @@
 
 ## Language and Localization
 
+- **ALL communication with the user MUST be in English**
 - **ALL code comments MUST be in English**
 - **ALL variable names, function names, and identifiers MUST be in English**
 - **ALL commit messages MUST be in English**
 - **ALL documentation MUST be in English**
+- **ALL descriptions and explanations MUST be in English**
 - User-facing text (UI labels, messages, etc.) should be in Russian
 - Keep code and comments separate from UI text
 
@@ -39,10 +41,12 @@
 
 ## Specific Rules
 
+- Agent responses MUST be in English only
 - No Russian in code, comments, or variable names
 - No auto-generated summary documents
 - No "changes applied" or "what I did" files
 - Focus on writing code, not documenting what you wrote
+- Always write code, comments, and descriptions in English
 
 ## Documentation Rules
 

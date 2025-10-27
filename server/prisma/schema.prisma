@@ -11,12 +11,11 @@ datasource db {
 // Users - registered players
 model User {
   id                  String   @id @default(cuid())
-  email               String   @unique
+  email               String?  @unique
   username            String   @unique
-  password            String // hashed password
+  password            String? // hashed password
   displayName         String
   avatar              String? // URL to avatar image
-  blockchainAddress   String?  @unique // blockchain address
   blockchainConnected Boolean  @default(false)
   level               Int      @default(1)
   experience          Int      @default(0)
@@ -25,15 +24,53 @@ model User {
   updatedAt           DateTime @updatedAt
 
   // Relations
-  gameSessions GameSession[]
-  playerStats  PlayerStats[]
-  achievements UserAchievement[]
-  hostedRooms  GameRoom[]        @relation("HostedRooms")
+  gameSessions    GameSession[]
+  playerStats     PlayerStats[]
+  achievements    UserAchievement[]
+  hostedRooms     GameRoom[]        @relation("HostedRooms")
+  wallets         Wallet[]
+  oauthProviders  OAuthProvider[]
 
   @@index([email])
   @@index([username])
-  @@index([blockchainAddress])
   @@map("users")
+}
+
+// Blockchain wallets for users
+model Wallet {
+  id         String   @id @default(cuid())
+  userId     String
+  address    String
+  type       String  // 'evm', 'hedera', etc.
+  network    String? // 'mainnet', 'testnet', etc.
+  isPrimary  Boolean @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([address, type])
+  @@index([userId])
+  @@index([address])
+  @@map("wallets")
+}
+
+// OAuth providers
+model OAuthProvider {
+  id         String   @id @default(cuid())
+  userId     String
+  provider   String   // 'google', 'github', etc.
+  providerId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+  @@index([providerId])
+  @@map("oauth_providers")
 }
 
 // Game types - different games available

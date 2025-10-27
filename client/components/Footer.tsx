@@ -25,7 +25,8 @@ import {
 	FaMedium
 } from 'react-icons/fa';
 import { BiLogoInstagramAlt } from 'react-icons/bi';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import hederaService from '../lib/hedera';
 
 interface SocialLink {
 	name: string;
@@ -50,6 +51,7 @@ export function Footer() {
 	const [email, setEmail] = useState('');
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [isSubmitted, setIsSubmitted] = useState(false);
+	const [hederaNetwork, setHederaNetwork] = useState<'mainnet' | 'testnet'>('testnet');
 
 	const socialLinks: SocialLink[] = [
 		{
@@ -167,6 +169,11 @@ export function Footer() {
 		} finally {
 			setIsSubmitting(false);
 		}
+	};
+
+	const handleNetworkChange = async (network: 'mainnet' | 'testnet') => {
+		setHederaNetwork(network);
+		await hederaService.switchNetwork(network);
 	};
 
 	return (
@@ -304,6 +311,33 @@ export function Footer() {
 								</Button>
 							</form>
 						)}
+
+						{/* Hedera Network Selector */}
+						<div className="flex items-center gap-2 p-2 mt-6 bg-muted rounded-md">
+								<FaShieldAlt className="w-4 h-4" />
+								<span className="text-muted-foreground mr-2">Network:</span>
+								<button
+									onClick={() => handleNetworkChange('mainnet')}
+									className={`px-2 py-1 rounded text-xs transition-colors ${
+										hederaNetwork === 'mainnet'
+											? 'bg-primary text-primary-foreground'
+											: 'hover:bg-muted/80'
+									}`}
+								>
+									Mainnet
+								</button>
+								<span className="text-muted-foreground">|</span>
+								<button
+									onClick={() => handleNetworkChange('testnet')}
+									className={`px-2 py-1 rounded text-xs transition-colors ${
+										hederaNetwork === 'testnet'
+											? 'bg-primary text-primary-foreground'
+											: 'hover:bg-muted/80'
+									}`}
+								>
+									Testnet
+								</button>
+							</div>
 					</div>
 				</div>
 
@@ -313,25 +347,29 @@ export function Footer() {
 						<div className="text-sm text-muted-foreground">
 							© 2025 Web3Pad. All rights reserved.
 						</div>
-						<div className="flex items-center gap-6 text-sm">
-							<Link 
-								href="/privacy" 
-								className="text-muted-foreground hover:text-primary transition-colors"
-							>
-								Privacy Policy
-							</Link>
-							<Link 
-								href="/terms" 
-								className="text-muted-foreground hover:text-primary transition-colors"
-							>
-								Terms of Service
-							</Link>
-							<Link 
-								href="/contact" 
-								className="text-muted-foreground hover:text-primary transition-colors"
-							>
-								Contact
-							</Link>
+						<div className="flex items-center gap-4 text-sm">
+							
+							
+							<div className="flex items-center gap-6 text-sm">
+								<Link 
+									href="/privacy" 
+									className="text-muted-foreground hover:text-primary transition-colors"
+								>
+									Privacy Policy
+								</Link>
+								<Link 
+									href="/terms" 
+									className="text-muted-foreground hover:text-primary transition-colors"
+								>
+									Terms of Service
+								</Link>
+								<Link 
+									href="/contact" 
+									className="text-muted-foreground hover:text-primary transition-colors"
+								>
+									Contact
+								</Link>
+							</div>
 						</div>
 					</div>
 				</div>
