@@ -43,12 +43,37 @@ export function SignInForm({ onSuccess, onError }: SignInFormProps) {
 		onError('');
 
 		try {
+			console.log(`Attempting ${provider} authentication...`);
+			
+			// Проверим доступность переменных окружения для отладки (только для GitHub)
+			if (provider === 'github') {
+				try {
+					const debugResponse = await fetch('/api/debug/github-auth');
+					const debugData = await debugResponse.json();
+					console.log('GitHub Auth Debug:', debugData);
+				} catch (debugErr) {
+					console.error('GitHub Auth Debug Error:', debugErr);
+				}
+			}
+			
 			// For OAuth, use redirect: true to properly redirect to provider
-			await signIn(provider, {
+			const result = await signIn(provider, {
 				callbackUrl: window.location.origin,
+				redirect: false, // Изменено для отладки
 			});
+			
+			console.log(`${provider} auth result:`, result);
+			
+			if (result?.error) {
+				onError(`${provider} authentication failed: ${result.error}`);
+			} else if (result?.url) {
+				// Успешно получен URL для перенаправления
+				console.log(`Redirecting to ${result.url}`);
+				window.location.href = result.url;
+			}
 		} catch (err) {
-			onError('Authentication error. Please try again.');
+			console.error(`${provider} authentication error:`, err);
+			onError(`Authentication error with ${provider}. Please try again.`);
 			setLoading(false);
 		}
 	};

@@ -126,11 +126,24 @@ router.post('/oauth', async (req, res) => {
 	try {
 		const { provider, providerId, email, name, image } = req.body;
 		
-		console.log(`[Auth] OAuth request received: provider=${provider}, email=${email}`);
+		console.log(`[Auth] OAuth request received:`, { 
+			provider, 
+			providerId, 
+			email, 
+			name, 
+			hasImage: !!image,
+			headers: req.headers['user-agent'],
+			ip: req.ip || req.socket.remoteAddress
+		});
 
-		if (!provider || !providerId || !email) {
-			console.log('[Auth] OAuth error: Missing required fields');
-			return res.status(400).json({ error: 'Missing required OAuth fields' });
+		if (!provider || !providerId) {
+			console.log('[Auth] OAuth error: Missing provider or providerId');
+			return res.status(400).json({ error: 'Missing provider information' });
+		}
+		
+		if (!email) {
+			console.log('[Auth] OAuth error: Missing email field');
+			return res.status(400).json({ error: 'Email address is required. Please ensure your GitHub account has a public email or check account settings.' });
 		}
 
 		// Check if user exists by email

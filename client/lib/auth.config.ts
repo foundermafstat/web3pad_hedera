@@ -22,6 +22,22 @@ export const authConfig: NextAuthConfig = {
 		GitHub({
 			clientId: process.env.GITHUB_CLIENT_ID!,
 			clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+			authorization: {
+				params: {
+					// Запрашиваем доступ к email, иначе GitHub может не предоставить его
+					scope: 'read:user user:email'
+				}
+			},
+			profile(profile) {
+				console.log('GitHub profile:', profile);
+				return {
+					id: profile.id.toString(),
+					name: profile.name || profile.login,
+					email: profile.email,
+					image: profile.avatar_url,
+					username: profile.login,
+				}
+			},
 		}),
 		Credentials({
 			name: 'credentials',
@@ -60,8 +76,12 @@ export const authConfig: NextAuthConfig = {
 					}
 
 					const user = await response.json();
-					console.log('[NextAuth] Login successful for user:', user.username);
-					return user;
+					console.log('[NextAuth] Login successful for user:', user.username, 'displayName:', user.displayName);
+					// Преобразуем displayName в name для NextAuth
+					return {
+						...user,
+						name: user.displayName // Добавляем стандартное поле name для NextAuth
+					};
 				} catch (error) {
 					console.error('Auth error:', error);
 					return null;
@@ -82,7 +102,12 @@ export const authConfig: NextAuthConfig = {
 				}
 
 				// Validate Blockchain wallet address format
-				if (!isValidBlockchainAddress(credentials.walletAddress as string)) {
+				try {
+					if (!isValidBlockchainAddress(credentials.walletAddress as string)) {
+						return null;
+					}
+				} catch (error) {
+					console.error('[NextAuth] Invalid blockchain address:', error);
 					return null;
 				}
 
@@ -155,27 +180,39 @@ export const authConfig: NextAuthConfig = {
 				try {
 					console.log('[NextAuth] OAuth sign in attempt:', {
 						provider: account.provider,
+						providerAccountId: account.providerAccountId,
 						email: user.email,
-						name: user.name
+						name: user.name,
+						hasImage: !!user.image,
 					});
+					
+					// Проверка наличия email в GitHub профиле
+					if (account.provider === 'github' && !user.email) {
+						console.error('[NextAuth] GitHub email missing. Check GitHub privacy settings.');
+						return '/auth/error?error=GitHubEmailPrivate';
+					}
 					
 					// Register/login OAuth user on server
 					const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://web3pad.xyz/api';
 					const apiUrl = baseUrl.endsWith('/api') ? baseUrl : `${baseUrl}/api`;
 					console.log('[NextAuth] Making OAuth request to:', `${apiUrl}/auth/oauth`);
 					
+					const oauthData = {
+						provider: account.provider,
+						providerId: account.providerAccountId,
+						email: user.email,
+						name: user.name,
+						image: user.image,
+					};
+					
+					console.log('[NextAuth] OAuth request data:', oauthData);
+					
 					const response = await fetch(
 						`${apiUrl}/auth/oauth`,
 						{
 							method: 'POST',
 							headers: { 'Content-Type': 'application/json' },
-							body: JSON.stringify({
-								provider: account.provider,
-								providerId: account.providerAccountId,
-								email: user.email,
-								name: user.name,
-								image: user.image,
-							}),
+							body: JSON.stringify(oauthData),
 						}
 					);
 
@@ -184,10 +221,15 @@ export const authConfig: NextAuthConfig = {
 					if (!response.ok) {
 						const errorText = await response.text();
 						console.error('OAuth registration failed:', errorText);
-						return false;
+						return `/auth/error?error=OAuthServerError&provider=${account.provider}&status=${response.status}`;
 					}
 
 					const serverUser = await response.json();
+					console.log('[NextAuth] Server user data:', {
+						id: serverUser.id,
+						email: serverUser.email,
+						username: serverUser.username,
+					});
 					
 					// Merge server user data
 					user.id = serverUser.id;
@@ -196,8 +238,9 @@ export const authConfig: NextAuthConfig = {
 					
 					return true;
 				} catch (error) {
-					console.error('OAuth error:', error);
-					return false;
+					console.error('[NextAuth] OAuth error:', error);
+					const errorMessage = error instanceof Error ? error.message : "Unknown error";
+					return `/auth/error?error=OAuthProcessError&provider=${account.provider}&message=${encodeURIComponent(errorMessage)}`;
 				}
 			}
 
@@ -208,17 +251,39 @@ export const authConfig: NextAuthConfig = {
 				token.id = user.id;
 				token.username = (user as any).username;
 				token.email = user.email;
+				token.name = user.name; // Store display name in token
 				token.picture = user.image; // Store avatar in token
 				token.walletAddress = (user as any).walletAddress; // Store wallet address
+				token.displayName = (user as any).displayName || user.name; // Сохраняем displayName для совместимости
+				
+				// Отладка
+				console.log('[NextAuth] JWT user data:', { 
+					id: user.id,
+					name: user.name,
+					email: user.email,
+					username: (user as any).username,
+					displayName: (user as any).displayName 
+				});
 			}
 			return token;
 		},
 		async session({ session, token }) {
 			if (session.user) {
 				session.user.id = token.id as string;
+				session.user.name = token.name as string; // Устанавливаем имя из токена
 				(session.user as any).username = token.username;
+				(session.user as any).displayName = token.displayName; // Добавляем displayName в сессию
 				session.user.image = token.picture as string; // Set avatar from token
 				(session.user as any).walletAddress = token.walletAddress as string; // Set wallet address
+				
+				// Отладка
+				console.log('[NextAuth] Session user data:', {
+					id: session.user.id,
+					name: session.user.name,
+					email: session.user.email,
+					username: (session.user as any).username,
+					displayName: (session.user as any).displayName
+				});
 			}
 			return session;
 		},
@@ -230,7 +295,9 @@ export const authConfig: NextAuthConfig = {
 	secret: process.env.NEXTAUTH_SECRET,
 };
 
-function isValidBlockchainAddress(arg0: string) {
-	throw new Error('Function not implemented.');
+function isValidBlockchainAddress(address: string): boolean {
+	// Простая проверка, чтобы избежать ошибки линтера
+	// Можно реализовать более сложную валидацию
+	return address.length > 10 && address.startsWith('0x');
 }
 
