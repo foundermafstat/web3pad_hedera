@@ -1,0 +1,311 @@
+// Prisma schema for W3P (Web3Pad)
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Users - registered players
+model User {
+  id                  String   @id @default(cuid())
+  email               String   @unique
+  username            String   @unique
+  password            String // hashed password
+  displayName         String
+  avatar              String? // URL to avatar image
+  blockchainAddress   String?  @unique // blockchain address
+  blockchainConnected Boolean  @default(false)
+  level               Int      @default(1)
+  experience          Int      @default(0)
+  coins               Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  // Relations
+  gameSessions GameSession[]
+  playerStats  PlayerStats[]
+  achievements UserAchievement[]
+  hostedRooms  GameRoom[]        @relation("HostedRooms")
+
+  @@index([email])
+  @@index([username])
+  @@index([blockchainAddress])
+  @@map("users")
+}
+
+// Game types - different games available
+model GameType {
+  id                String   @id @default(cuid())
+  code              String   @unique // 'shooter', 'race', 'towerdefence', 'quiz', 'gyrotest'
+  name              String
+  shortDescription  String
+  fullDescription   String
+  icon              String
+  images            String[] // Array of image URLs
+  videos            String[] // Array of video URLs
+  category          String[] // Categories like ['action', 'multiplayer', 'mobile']
+  gameType          String   @default("web2") // 'web2' or 'web3'
+  minPlayers        Int      @default(1)
+  maxPlayers        Int      @default(10)
+  difficulty        String   @default("medium") // easy, medium, hard
+  estimatedDuration Int? // estimated game duration in minutes
+  controls          String[] // control types like ['gyroscope', 'touch', 'buttons']
+
+  // Extended game information
+  features  Json? // Key features of the game
+  howToPlay Json? // Step-by-step instructions
+  tips      Json? // Pro tips for players
+
+  isActive   Boolean  @default(true)
+  isFeatured Boolean  @default(false)
+  sortOrder  Int? // for custom ordering
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relations
+  gameContent      GameContent[]
+  gameSessions     GameSession[]
+  gameRooms        GameRoom[]
+  gameAchievements GameAchievement[]
+
+  @@index([code])
+  @@index([gameType])
+  @@index([category])
+  @@index([isActive])
+  @@map("game_types")
+}
+
+// Game-specific achievements
+model GameAchievement {
+  id          String   @id @default(cuid())
+  gameTypeId  String
+  code        String   @unique
+  title       String
+  description String
+  icon        String?
+  points      Int      @default(10)
+  criteria    Json // conditions to unlock
+  sortOrder   Int?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  // Relations
+  gameType GameType @relation(fields: [gameTypeId], references: [id], onDelete: Cascade)
+
+  @@index([gameTypeId])
+  @@index([code])
+  @@map("game_achievements")
+}
+
+// Game content - questions, levels, configurations
+model GameContent {
+  id         String  @id @default(cuid())
+  gameTypeId String
+  type       String // 'question', 'level', 'config', 'asset'
+  category   String? // for questions: 'math', 'history', etc.
+  difficulty String  @default("medium")
+
+  // Content data (JSON for flexibility)
+  data Json // question text, answers, level config, etc.
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  gameType GameType @relation(fields: [gameTypeId], references: [id], onDelete: Cascade)
+
+  @@index([gameTypeId, type])
+  @@index([category])
+  @@map("game_content")
+}
+
+// Game rooms - active multiplayer rooms
+model GameRoom {
+  id         String @id @default(cuid())
+  roomId     String @unique // user-friendly room ID
+  name       String
+  gameTypeId String
+  hostId     String
+
+  maxPlayers     Int     @default(4)
+  currentPlayers Int     @default(0)
+  hasPassword    Boolean @default(false)
+  password       String? // hashed password
+
+  status String @default("waiting") // waiting, playing, finished
+
+  config Json? // room-specific configuration
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  closedAt  DateTime?
+
+  // Relations
+  gameType     GameType      @relation(fields: [gameTypeId], references: [id])
+  host         User          @relation("HostedRooms", fields: [hostId], references: [id])
+  gameSessions GameSession[]
+
+  @@index([roomId])
+  @@index([status])
+  @@index([gameTypeId])
+  @@map("game_rooms")
+}
+
+// Game sessions - individual game instances
+model GameSession {
+  id         String  @id @default(cuid())
+  gameRoomId String?
+  gameTypeId String
+  hostId     String
+
+  status    String    @default("active") // active, completed, abandoned
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+  duration  Int? // in seconds
+
+  // Game specific data
+  gameData Json? // scores, events, timeline
+
+  // Relations
+  gameRoom GameRoom?    @relation(fields: [gameRoomId], references: [id], onDelete: SetNull)
+  gameType GameType     @relation(fields: [gameTypeId], references: [id])
+  host     User         @relation(fields: [hostId], references: [id])
+  results  GameResult[]
+
+  @@index([gameRoomId])
+  @@index([gameTypeId])
+  @@index([status])
+  @@map("game_sessions")
+}
+
+// Game results - player performance in sessions
+model GameResult {
+  id         String @id @default(cuid())
+  sessionId  String
+  playerId   String
+  playerName String // for guest players
+
+  score          Int  @default(0)
+  kills          Int? // for shooter
+  deaths         Int? // for shooter
+  lapTime        Int? // for race (in milliseconds)
+  questionsRight Int? // for quiz
+  questionsTotal Int? // for quiz
+
+  rank Int? // final rank in game
+
+  // Performance metrics
+  performance Json? // detailed performance data
+
+  achievements String[] // achievements earned in this session
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  session GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([playerId])
+  @@map("game_results")
+}
+
+// Player statistics - aggregate stats per player per game
+model PlayerStats {
+  id         String @id @default(cuid())
+  userId     String
+  gameTypeId String
+
+  gamesPlayed Int @default(0)
+  gamesWon    Int @default(0)
+  gamesLost   Int @default(0)
+
+  totalScore   Int   @default(0)
+  highestScore Int   @default(0)
+  averageScore Float @default(0)
+
+  totalKills  Int? @default(0)
+  totalDeaths Int? @default(0)
+
+  bestLapTime   Int? // for race
+  totalRaceTime Int? // for race
+
+  questionsAnswered Int? @default(0)
+  questionsCorrect  Int? @default(0)
+
+  // Overall performance
+  winRate     Float  @default(0)
+  averageRank Float?
+
+  lastPlayedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameTypeId])
+  @@index([userId])
+  @@map("player_stats")
+}
+
+// Achievements - unlockable achievements
+model Achievement {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  name        String
+  description String
+  icon        String?
+  category    String // 'gameplay', 'social', 'collection', etc.
+  points      Int     @default(10)
+
+  // Unlock criteria
+  criteria Json // conditions to unlock
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  // Relations
+  userAchievements UserAchievement[]
+
+  @@index([category])
+  @@map("achievements")
+}
+
+// User achievements - tracking unlocked achievements
+model UserAchievement {
+  id            String @id @default(cuid())
+  userId        String
+  achievementId String
+
+  unlockedAt DateTime @default(now())
+
+  // Relations
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@index([userId])
+  @@map("user_achievements")
+}
+
+// Leaderboard - daily/weekly/all-time rankings
+model Leaderboard {
+  id          String    @id @default(cuid())
+  gameTypeId  String? // null = global leaderboard
+  period      String // 'daily', 'weekly', 'monthly', 'alltime'
+  periodStart DateTime
+  periodEnd   DateTime?
+
+  rankings Json // array of {userId, username, score, rank}
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([gameTypeId, period])
+  @@index([periodStart])
+  @@map("leaderboards")
+}
