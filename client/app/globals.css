@@ -1,0 +1,374 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--font-sans: var(--font-tektur);
+	--font-mono: var(--font-geist-mono);
+	--color-sidebar-ring: var(--sidebar-ring);
+	--color-sidebar-border: var(--sidebar-border);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar: var(--sidebar);
+	--color-chart-5: var(--chart-5);
+	--color-chart-4: var(--chart-4);
+	--color-chart-3: var(--chart-3);
+	--color-chart-2: var(--chart-2);
+	--color-chart-1: var(--chart-1);
+	--color-ring: var(--ring);
+	--color-input: var(--input);
+	--color-border: var(--border);
+	--color-destructive: var(--destructive);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-accent: var(--accent);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-muted: var(--muted);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-secondary: var(--secondary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-primary: var(--primary);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-popover: var(--popover);
+	--color-card-foreground: var(--card-foreground);
+	--color-card: var(--card);
+	--radius-sm: calc(var(--radius) - 4px);
+	--radius-md: calc(var(--radius) - 2px);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) + 4px);
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+	width: 100%;
+	min-height: 100%;
+	background: var(--background);
+	color: var(--foreground);
+	font-family: var(--font-tektur), -apple-system, BlinkMacSystemFont,
+		'Segoe UI', Roboto, sans-serif;
+	font-weight: 400;
+}
+
+h1, h2, h3, h4, h5, h6 {
+	font-weight: 700;
+}
+
+#__next {
+	width: 100%;
+	height: 100%;
+}
+
+:root {
+	--radius: 0.65rem;
+	--background: oklch(0.141 0.005 285.823);
+	--foreground: oklch(0.985 0 0);
+	--card: oklch(0.21 0.006 285.885);
+	--card-foreground: oklch(0.985 0 0);
+	--popover: oklch(0.21 0.006 285.885);
+	--popover-foreground: oklch(0.985 0 0);
+	--primary: oklch(0.87 0.2893 142.92);
+	--primary-foreground: oklch(0.393 0.095 152.535);
+	--secondary: oklch(0.274 0.006 286.033);
+	--secondary-foreground: oklch(0.985 0 0);
+	--muted: oklch(0.274 0.006 286.033);
+	--muted-foreground: oklch(0.705 0.015 286.067);
+	--accent: oklch(0.274 0.006 286.033);
+	--accent-foreground: oklch(0.985 0 0);
+	--destructive: oklch(0.704 0.191 22.216);
+	--border: oklch(1 0 0 / 10%);
+	--input: oklch(1 0 0 / 15%);
+	--ring: oklch(0.527 0.154 150.069);
+	--chart-1: oklch(0.488 0.243 264.376);
+	--chart-2: oklch(0.696 0.17 162.48);
+	--chart-3: oklch(0.769 0.188 70.08);
+	--chart-4: oklch(0.627 0.265 303.9);
+	--chart-5: oklch(0.645 0.246 16.439);
+	--sidebar: oklch(0.21 0.006 285.885);
+	--sidebar-foreground: oklch(0.985 0 0);
+	--sidebar-primary: oklch(0.87 0.2893 142.92);
+	--sidebar-primary-foreground: oklch(0.393 0.095 152.535);
+	--sidebar-accent: oklch(0.274 0.006 286.033);
+	--sidebar-accent-foreground: oklch(0.985 0 0);
+	--sidebar-border: oklch(1 0 0 / 10%);
+	--sidebar-ring: oklch(0.527 0.154 150.069);
+  }
+
+@layer base {
+	* {
+		@apply border-border outline-ring/50;
+	}
+	body {
+		@apply bg-background text-foreground;
+	}
+}
+
+/* Custom scrollbar styles */
+.scrollbar-thin::-webkit-scrollbar {
+	height: 6px;
+	width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+	@apply bg-gray-800 rounded-full;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+	@apply bg-gray-700 rounded-full;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+	@apply bg-gray-600;
+}
+
+/* Hide scrollbar for Firefox */
+.scrollbar-thin {
+	scrollbar-width: thin;
+	scrollbar-color: rgb(55, 65, 81) rgb(31, 41, 55);
+}
+
+/* Animation classes */
+@keyframes slide-in-from-left {
+	from {
+		opacity: 0;
+		transform: translateX(-20px);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+
+.animate-in {
+	animation: slide-in-from-left 0.3s ease-out;
+}
+
+/* Fade in animation */
+@keyframes fade-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+.fade-in {
+	animation: fade-in 0.2s ease-out;
+}
+
+/* Zoom in animation */
+@keyframes zoom-in-95 {
+	from {
+		opacity: 0;
+		transform: scale(0.95);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+.zoom-in-95 {
+	animation: zoom-in-95 0.2s ease-out;
+}
+
+/* Theme gradients */
+.gradient-primary {
+	background: linear-gradient(135deg, oklch(0.85 0.2 90), oklch(0.8 0.18 95));
+}
+
+.gradient-secondary {
+	background: linear-gradient(135deg, oklch(0.75 0.15 160), oklch(0.8 0.18 95));
+}
+
+.gradient-accent {
+	background: linear-gradient(135deg, oklch(0.8 0.18 120), oklch(0.85 0.2 90));
+}
+
+/* Glass effect for header */
+.glass-header {
+	backdrop-filter: blur(20px);
+	-webkit-backdrop-filter: blur(20px);
+	background: rgba(34, 34, 34, 0.8);
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* W3P Logo Styles */
+.w3p-logo {
+	display: inline-block;
+	vertical-align: middle;
+	transition: all 0.2s ease;
+	color: var(--foreground);
+}
+
+.w3p-logo:hover {
+	opacity: 0.8;
+	transform: scale(1.02);
+}
+
+/* Logo loading animation */
+.w3p-logo path {
+	transition: fill 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Loading state animation */
+.w3p-logo.loading {
+	animation: logoPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes logoPulse {
+	0%, 100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+	50% {
+		opacity: 0.7;
+		transform: scale(1.02);
+	}
+}
+
+/* Logo size variations */
+.w3p-logo-xs {
+	width: 40px;
+	height: 26px;
+}
+
+.w3p-logo-sm {
+	width: 60px;
+	height: 39px;
+}
+
+.w3p-logo-md {
+	width: 78px;
+	height: 52px;
+}
+
+.w3p-logo-lg {
+	width: 120px;
+	height: 78px;
+}
+
+.w3p-logo-xl {
+	width: 156px;
+	height: 104px;
+}
+
+/* Logo color variations */
+.w3p-logo-primary {
+	color: var(--primary);
+}
+
+.w3p-logo-accent {
+	color: var(--accent-foreground);
+}
+
+.w3p-logo-muted {
+	color: var(--muted-foreground);
+}
+
+.w3p-logo-white {
+	color: white;
+}
+
+.w3p-logo-black {
+	color: black;
+}
+
+/* Force landscape orientation for mobile controllers */
+@media screen and (max-width: 768px) and (orientation: portrait) {
+	.force-landscape {
+		transform: rotate(90deg);
+		transform-origin: center center;
+		width: 100vh;
+		height: 100vw;
+		position: fixed;
+		top: 50%;
+		left: 50%;
+		margin-top: -50vw;
+		margin-left: -50vh;
+	}
+}
+
+/* Landscape orientation styles */
+@media screen and (orientation: landscape) {
+	.landscape-optimized {
+		/* Optimize for landscape mode */
+	}
+}
+
+/* Portrait orientation warning */
+@media screen and (orientation: portrait) {
+	.portrait-warning {
+		display: block;
+	}
+	
+	.landscape-content {
+		display: none;
+	}
+}
+
+/* Mobile landscape controller styles */
+.mobile-controller-landscape {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	padding: 1rem;
+	gap: 2rem;
+}
+
+.mobile-controller-landscape .joystick-area {
+	flex: 0 0 auto;
+}
+
+.mobile-controller-landscape .action-area {
+	flex: 0 0 auto;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 1rem;
+}
+
+.mobile-controller-landscape .info-area {
+	flex: 0 0 auto;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+/* Fix for Sheet component preventing layout shifts */
+[data-radix-scroll-area-viewport] {
+	overflow: hidden !important;
+}
+
+/* Prevent body scroll lock from affecting video slider */
+body[data-scroll-locked] .game-video-slider {
+	position: relative !important;
+	width: 100% !important;
+	height: 100vh !important;
+	z-index: 1 !important;
+}
+
+/* Ensure video elements maintain their size when sheet is open */
+body[data-scroll-locked] .game-video-slider video {
+	width: 100% !important;
+	height: 100% !important;
+	object-fit: cover !important;
+	position: absolute !important;
+	top: 0 !important;
+	left: 0 !important;
+}
+
+/* Prevent layout shifts when sheet opens */
+body[data-scroll-locked] .game-video-slider .absolute {
+	position: absolute !important;
+}

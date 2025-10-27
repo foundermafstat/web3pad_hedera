@@ -1,0 +1,151 @@
+{
+  "slides": [
+    {
+      "id": "shooter",
+      "name": "Battle Arena",
+      "shortDescription": "Multiplayer top-down shooter with bots and power-ups",
+      "description": "Dive into dynamic real-time battles! Use teleports, collect speed boosts and shields to defeat opponents and AI bots in intense combat scenarios.",
+      "minPlayers": 1,
+      "maxPlayers": 10,
+      "icon": "🎯",
+      "videoUrl": "/videos/game10.mp4",
+      "posterUrl": "/images/games/shooter-poster.jpg",
+      "gradient": "from-blue-900/90 via-cyan-800/80 to-teal-700/70 ",
+      "features": [
+        "Teleports",
+        "Power-ups",
+        "AI Bots",
+        "Up to 10 players"
+      ],
+      "playTime": "5-15 min",
+      "duration": 9000,
+      "difficulty": "Medium",
+      "category": "Action",
+      "controls": [
+        "Move with joystick",
+        "Tap to shoot",
+        "Auto-aim assist"
+      ],
+      "gameMode": "PvP + PvE",
+      "specialFeatures": [
+        "Dynamic obstacles",
+        "Interactive objects", 
+        "Real-time multiplayer",
+        "Power-up system"
+      ]
+    },
+    {
+      "id": "race",
+      "name": "Race Track",
+      "shortDescription": "Competitive racing game with checkpoints and obstacles",
+      "description": "Compete on high-speed tracks with obstacles and checkpoints. Overtake rivals and become the racing champion in thrilling competitions!",
+      "minPlayers": 1,
+      "maxPlayers": 8,
+      "icon": "🏎️",
+      "videoUrl": "/videos/game09.mp4", 
+      "posterUrl": "/images/games/race-poster.jpg",
+      "gradient": "from-red-900/90 via-orange-800/80 to-yellow-700/70",
+      "features": [
+        "Checkpoints",
+        "Obstacles", 
+        "Leaderboard",
+        "Up to 8 players"
+      ],
+      "playTime": "3-10 min",
+      "duration": 10000,
+      "difficulty": "Easy",
+      "category": "Racing",
+      "controls": [
+        "Tilt to steer",
+        "Touch for boost",
+        "Brake controls"
+      ],
+      "gameMode": "PvP Racing",
+      "specialFeatures": [
+        "Physics-based driving",
+        "Multiple track layouts",
+        "Real-time positions",
+        "Boost system"
+      ]
+    },
+    
+    {
+      "id": "quiz",
+      "name": "Quiz Battle", 
+      "shortDescription": "Test your knowledge in a multiplayer quiz game with time pressure",
+      "description": "Test your knowledge in an intellectual battle! Answer quickly and correctly to earn maximum points in this competitive quiz experience.",
+      "minPlayers": 2,
+      "maxPlayers": 8,
+      "icon": "🧠",
+      "videoUrl": "/videos/game11.mp4",
+      "posterUrl": "/images/games/quiz-poster.jpg",
+      "gradient": "from-green-900/90 via-emerald-800/80 to-teal-700/70", 
+      "features": [
+        "Trivia questions",
+        "Time pressure",
+        "Speed bonus",
+        "Up to 8 players"
+      ],
+      "playTime": "5-10 min",
+      "duration": 9000,
+      "difficulty": "Medium", 
+      "category": "Trivia",
+      "controls": [
+        "Multiple choice",
+        "Quick tap answers",
+        "Time countdown"
+      ],
+      "gameMode": "PvP Quiz",
+      "specialFeatures": [
+        "Multiple categories",
+        "Difficulty scaling", 
+        "Speed bonuses",
+        "Real-time scoring"
+      ]
+    },
+    {
+      "id": "towerdefence", 
+      "name": "Tower Defence",
+      "shortDescription": "Defend your castle from waves of enemies with strategic tower placement",
+      "description": "Strategically place towers and defend your castle from enemy waves. Upgrade towers and create an impenetrable defense system!",
+      "minPlayers": 1,
+      "maxPlayers": 4,
+      "icon": "🏰",
+      "videoUrl": "/videos/game08.mp4",
+      "posterUrl": "/images/games/towerdefence-poster.jpg", 
+      "gradient": "from-purple-900/90 via-indigo-800/80 to-blue-700/70",
+      "features": [
+        "Tower upgrades",
+        "Enemy waves",
+        "Strategy",
+        "Up to 4 players"
+      ],
+      "playTime": "10-20 min", 
+      "duration": 10000,
+      "difficulty": "Hard",
+      "category": "Strategy",
+      "controls": [
+        "Tap to place towers",
+        "Drag to upgrade", 
+        "Strategy planning"
+      ],
+      "gameMode": "Co-op Defense",
+      "specialFeatures": [
+        "Multiple tower types",
+        "Wave progression",
+        "Cooperative gameplay",
+        "Resource management"
+      ]
+    }
+  ],
+  "settings": {
+    "autoPlayDuration": 8000,
+    "transitionDuration": 1000,
+    "pauseOnHover": true,
+    "enableSwipeGestures": true,
+    "showProgressBar": true,
+    "showNavigationArrows": true,
+    "enableVideoAutoplay": true,
+    "fallbackToGradient": true
+  }
+}
