@@ -1,14 +1,14 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import * as PIXI from 'pixi.js';
+import type * as PIXIType from 'pixi.js';
 import { io, Socket } from 'socket.io-client';
 import { FaArrowLeft, FaUsers, FaQrcode, FaWifi } from 'react-icons/fa';
 import dynamic from 'next/dynamic';
 
 const GameQRSheet = dynamic(
 	() => import('@/components/GameQRSheet').then((mod) => ({ default: mod.GameQRSheet })),
-	{ ssr: false }
+	{ ssr: false, loading: () => null }
 );
 
 interface Player {
@@ -71,14 +71,15 @@ const RaceGameScreen: React.FC<RaceGameScreenProps> = ({
 }) => {
 	console.log('[RaceGameScreen] Rendering with:', { gameId, gameType });
 	const pixiContainer = useRef<HTMLDivElement>(null);
-	const appRef = useRef<PIXI.Application | null>(null);
+	const appRef = useRef<PIXIType.Application | null>(null);
 	const socketRef = useRef<Socket | null>(null);
-	const gameContainerRef = useRef<PIXI.Container | null>(null);
-	const playersRef = useRef<Map<string, PIXI.Container>>(new Map());
-	const checkpointsRef = useRef<PIXI.Graphics[]>([]);
-	const sandAreasRef = useRef<PIXI.Graphics[]>([]);
-	const barriersRef = useRef<PIXI.Graphics[]>([]);
-	const startLineRef = useRef<PIXI.Graphics | null>(null);
+	const gameContainerRef = useRef<PIXIType.Container | null>(null);
+	const playersRef = useRef<Map<string, PIXIType.Container>>(new Map());
+	const checkpointsRef = useRef<PIXIType.Graphics[]>([]);
+	const sandAreasRef = useRef<PIXIType.Graphics[]>([]);
+	const barriersRef = useRef<PIXIType.Graphics[]>([]);
+	const startLineRef = useRef<PIXIType.Graphics | null>(null);
+	const pixiRef = useRef<typeof PIXIType | null>(null);
 	const [connectedPlayers, setConnectedPlayers] = useState<Player[]>([]);
 	const [showQRPopup, setShowQRPopup] = useState(false);
 	const [connectionStatus, setConnectionStatus] = useState<
@@ -139,6 +140,8 @@ const RaceGameScreen: React.FC<RaceGameScreenProps> = ({
 				console.log('[RaceGameScreen] Canvas dimensions:', canvasWidth, 'x', canvasHeight, 'scale:', scale);
 
 				console.log('[RaceGameScreen] Creating PIXI Application...');
+				const PIXI = await import('pixi.js');
+				pixiRef.current = PIXI;
 				const app = new PIXI.Application();
 				await app.init({
 					width: canvasWidth,
@@ -175,7 +178,12 @@ const RaceGameScreen: React.FC<RaceGameScreenProps> = ({
 				console.log('[RaceGameScreen] Game container created');
 
 				console.log('[RaceGameScreen] Initializing socket connection...');
-				socket = io(process.env.NEXT_PUBLIC_SERVER_URL!, {
+				// Import dynamically to get the current socket URL
+				const { getSocketServerUrl } = await import('@/lib/socket-utils');
+				const socketUrl = getSocketServerUrl();
+				console.log('[RaceGameScreen] Using socket URL:', socketUrl);
+				
+				socket = io(socketUrl, {
 					transports: ['websocket', 'polling'],
 					timeout: 5000,
 					reconnection: true,
@@ -294,7 +302,9 @@ const RaceGameScreen: React.FC<RaceGameScreenProps> = ({
 		};
 	}, [gameId, gameType]);
 
-	const updatePlayers = (players: Player[], container: PIXI.Container) => {
+	const updatePlayers = (players: Player[], container: PIXIType.Container) => {
+		if (!pixiRef.current) return;
+		const PIXI = pixiRef.current;
 		// Remove disconnected players
 		for (const [playerId, playerContainer] of playersRef.current) {
 			if (!players.find((p) => p.id === playerId)) {
@@ -415,8 +425,10 @@ const RaceGameScreen: React.FC<RaceGameScreenProps> = ({
 
 	const updateSandAreas = (
 		sandAreas: SandArea[],
-		container: PIXI.Container
+		container: PIXIType.Container
 	) => {
+		if (!pixiRef.current) return;
+		const PIXI = pixiRef.current;
 		console.log('[RaceGameScreen] Updating sand areas:', sandAreas?.length);
 		
 		if (sandAreasRef.current.length === 0 && sandAreas && sandAreas.length > 0) {
@@ -440,7 +452,9 @@ const RaceGameScreen: React.FC<RaceGameScreenProps> = ({
 		}
 	};
 
-	const updateBarriers = (barriers: Barrier[], container: PIXI.Container) => {
+	const updateBarriers = (barriers: Barrier[], container: PIXIType.Container) => {
+		if (!pixiRef.current) return;
+		const PIXI = pixiRef.current;
 		console.log('[RaceGameScreen] Updating barriers:', barriers?.length);
 		
 		if (barriersRef.current.length === 0 && barriers && barriers.length > 0) {
@@ -479,7 +493,9 @@ const RaceGameScreen: React.FC<RaceGameScreenProps> = ({
 		}
 	};
 
-	const updateStartLine = (startLine: StartLine, container: PIXI.Container) => {
+	const updateStartLine = (startLine: StartLine, container: PIXIType.Container) => {
+		if (!pixiRef.current) return;
+		const PIXI = pixiRef.current;
 		console.log('[RaceGameScreen] Updating start line:', !!startLine);
 		
 		if (!startLineRef.current && startLine) {
@@ -505,8 +521,10 @@ const RaceGameScreen: React.FC<RaceGameScreenProps> = ({
 
 	const updateCheckpoints = (
 		checkpoints: Checkpoint[],
-		container: PIXI.Container
+		container: PIXIType.Container
 	) => {
+		if (!pixiRef.current) return;
+		const PIXI = pixiRef.current;
 		console.log('[RaceGameScreen] Updating checkpoints:', checkpoints?.length);
 		
 		if (checkpointsRef.current.length === 0 && checkpoints && checkpoints.length > 0) {
@@ -550,7 +568,8 @@ const RaceGameScreen: React.FC<RaceGameScreenProps> = ({
 		}
 	};
 
-	const removePlayer = (playerId: string, container: PIXI.Container) => {
+	const removePlayer = (playerId: string, container: PIXIType.Container) => {
+		if (!pixiRef.current) return;
 		const playerContainer = playersRef.current.get(playerId);
 		if (playerContainer) {
 			container.removeChild(playerContainer);

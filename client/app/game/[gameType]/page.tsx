@@ -2,10 +2,10 @@
 
 import React, { use, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import * as PIXI from 'pixi.js';
 import { io, Socket } from 'socket.io-client';
 import { FaArrowLeft, FaUsers, FaBolt, FaQrcode, FaWifi } from 'react-icons/fa';
 import dynamic from 'next/dynamic';
+import type * as PIXIType from 'pixi.js';
 
 const GameQRSheet = dynamic(
 	() => import('@/components/GameQRSheet').then((mod) => ({ default: mod.GameQRSheet })),
@@ -179,23 +179,24 @@ export default function GamePage({ params }: PageProps) {
 	const resolvedParams = use(params);
 	const searchParams = useSearchParams();
 	const pixiContainer = useRef<HTMLDivElement>(null);
-	const appRef = useRef<PIXI.Application | null>(null);
+	const appRef = useRef<PIXIType.Application | null>(null);
 	const socketRef = useRef<Socket | null>(null);
-	const gameContainerRef = useRef<PIXI.Container | null>(null);
-	const playersMapRef = useRef<Map<string, PIXI.Container>>(new Map());
-	const bulletsMapRef = useRef<Map<string, PIXI.Graphics>>(new Map());
-	const botsMapRef = useRef<Map<string, PIXI.Container>>(new Map());
-	const obstaclesRef = useRef<PIXI.Graphics[]>([]);
-	const checkpointsRef = useRef<PIXI.Graphics[]>([]);
-	const interactiveObjectsRef = useRef<Map<string, PIXI.Container>>(new Map());
+	const gameContainerRef = useRef<PIXIType.Container | null>(null);
+	const pixiRef = useRef<typeof PIXIType | null>(null);
+	const playersMapRef = useRef<Map<string, PIXIType.Container>>(new Map());
+	const bulletsMapRef = useRef<Map<string, PIXIType.Graphics>>(new Map());
+	const botsMapRef = useRef<Map<string, PIXIType.Container>>(new Map());
+	const obstaclesRef = useRef<PIXIType.Graphics[]>([]);
+	const checkpointsRef = useRef<PIXIType.Graphics[]>([]);
+	const interactiveObjectsRef = useRef<Map<string, PIXIType.Container>>(new Map());
 
 	// Tower Defence specific refs
-	const towersMapRef = useRef<Map<string, PIXI.Container>>(new Map());
-	const mobsMapRef = useRef<Map<string, PIXI.Container>>(new Map());
-	const projectilesMapRef = useRef<Map<string, PIXI.Graphics>>(new Map());
-	const buildSpotsRef = useRef<PIXI.Graphics[]>([]);
-	const pathGraphicRef = useRef<PIXI.Graphics | null>(null);
-	const castleGraphicRef = useRef<PIXI.Container | null>(null);
+	const towersMapRef = useRef<Map<string, PIXIType.Container>>(new Map());
+	const mobsMapRef = useRef<Map<string, PIXIType.Container>>(new Map());
+	const projectilesMapRef = useRef<Map<string, PIXIType.Graphics>>(new Map());
+	const buildSpotsRef = useRef<PIXIType.Graphics[]>([]);
+	const pathGraphicRef = useRef<PIXIType.Graphics | null>(null);
+	const castleGraphicRef = useRef<PIXIType.Container | null>(null);
 
 	const [currentView, setCurrentView] = useState<'game' | 'controller'>('game');
 	const [roomId, setRoomId] = useState<string>('');
@@ -243,10 +244,17 @@ export default function GamePage({ params }: PageProps) {
 	// Generate controller URL for QR code dynamically (client-side only)
 	useEffect(() => {
 		if (typeof window !== 'undefined' && roomId) {
+			// Use window.location.origin to get the current origin
 			const baseUrl = window.location.origin;
-			const url = `${baseUrl}/game/${resolvedParams.gameType}?mode=controller&roomId=${roomId}`;
-			setControllerUrl(url);
-			console.log('[GamePage] QR URL:', url);
+			const gameType = resolvedParams.gameType;
+			
+			if (baseUrl && gameType) {
+				const url = `${baseUrl}/game/${gameType}?mode=controller&roomId=${roomId}`;
+				setControllerUrl(url);
+				console.log('[GamePage] QR URL:', url);
+			} else {
+				console.error('[GamePage] Missing baseUrl or gameType:', { baseUrl, gameType });
+			}
 		}
 	}, [resolvedParams.gameType, roomId]);
 
@@ -278,6 +286,10 @@ export default function GamePage({ params }: PageProps) {
 
 		const init = async () => {
 			console.log('[GamePage] Starting game initialization...');
+
+			// Dynamically import PIXI
+			const PIXI = await import('pixi.js');
+			pixiRef.current = PIXI;
 
 			// Wait for layout
 			await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -473,7 +485,10 @@ export default function GamePage({ params }: PageProps) {
 	}, [isInitialized, roomId, currentView, resolvedParams.gameType]);
 
 	// Update functions
-	const updatePlayers = (players: Player[], container: PIXI.Container) => {
+	const updatePlayers = (players: Player[], container: PIXIType.Container) => {
+		if (!pixiRef.current) return;
+		const PIXI = pixiRef.current;
+		
 		// Remove disconnected players
 		for (const [playerId, playerContainer] of playersMapRef.current) {
 			if (!players.find((p) => p.id === playerId)) {
@@ -546,7 +561,9 @@ export default function GamePage({ params }: PageProps) {
 		});
 	};
 
-	const updateBullets = (bullets: any[], container: PIXI.Container) => {
+	const updateBullets = (bullets: any[], container: PIXIType.Container) => {
+		if (!pixiRef.current) return;
+		const PIXI = pixiRef.current;
 		// Remove old bullets
 		for (const [bulletId, bulletGraphic] of bulletsMapRef.current) {
 			if (!bullets.find((b) => b.id === bulletId)) {
@@ -570,7 +587,9 @@ export default function GamePage({ params }: PageProps) {
 		});
 	};
 
-	const updateBots = (bots: any[], container: PIXI.Container) => {
+	const updateBots = (bots: any[], container: PIXIType.Container) => {
+		if (!pixiRef.current) return;
+		const PIXI = pixiRef.current;
 		// Remove dead bots
 		for (const [botId, botContainer] of botsMapRef.current) {
 			if (!bots.find((b) => b.id === botId && b.alive)) {
@@ -603,7 +622,9 @@ export default function GamePage({ params }: PageProps) {
 		});
 	};
 
-	const updateObstacles = (obstacles: any[], container: PIXI.Container) => {
+	const updateObstacles = (obstacles: any[], container: PIXIType.Container) => {
+		if (!pixiRef.current) return;
+		const PIXI = pixiRef.current;
 		if (obstaclesRef.current.length === 0 && obstacles.length > 0) {
 			obstacles.forEach((obstacle) => {
 				const obstacleGraphic = new PIXI.Graphics();
@@ -629,8 +650,10 @@ export default function GamePage({ params }: PageProps) {
 
 	const updateInteractiveObjects = (
 		objects: any[],
-		container: PIXI.Container
+		container: PIXIType.Container
 	) => {
+		if (!pixiRef.current) return;
+		const PIXI = pixiRef.current;
 		objects.forEach((obj) => {
 			let objContainer = interactiveObjectsRef.current.get(obj.id);
 
@@ -682,7 +705,9 @@ export default function GamePage({ params }: PageProps) {
 		});
 	};
 
-	const updateCheckpoints = (checkpoints: any[], container: PIXI.Container) => {
+	const updateCheckpoints = (checkpoints: any[], container: PIXIType.Container) => {
+		if (!pixiRef.current) return;
+		const PIXI = pixiRef.current;
 		if (checkpointsRef.current.length === 0 && checkpoints.length > 0) {
 			checkpoints.forEach((checkpoint, index) => {
 				const cpGraphic = new PIXI.Graphics();
@@ -718,7 +743,9 @@ export default function GamePage({ params }: PageProps) {
 		}
 	};
 
-	const updateRaceObstacles = (obstacles: any[], container: PIXI.Container) => {
+	const updateRaceObstacles = (obstacles: any[], container: PIXIType.Container) => {
+		if (!pixiRef.current) return;
+		const PIXI = pixiRef.current;
 		if (obstaclesRef.current.length === 0 && obstacles.length > 0) {
 			obstacles.forEach((obstacle) => {
 				const obstacleGraphic = new PIXI.Graphics();

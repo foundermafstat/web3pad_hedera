@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { io, Socket } from 'socket.io-client';
-import { FaGamepad, FaBolt, FaHeart, FaTrophy, FaShieldAlt, FaTachometerAlt, FaWifi, Navigation } from 'react-icons/fa';
+import { FaGamepad, FaBolt, FaHeart, FaTrophy, FaShieldAlt, FaTachometerAlt, FaWifi, FaCompass } from 'react-icons/fa';
 import AuthModal from '../../AuthModal';
 import LandscapeOrientationLock from '../../LandscapeOrientationLock';
 
@@ -68,110 +68,111 @@ const MobileController: React.FC<MobileControllerProps> = ({
 	const lastInputSentRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
-		// Initialize socket connection
-		// Use websocket URL (must point to domain root, no /api)
-		const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001';
-		console.log('Connecting to socket server at:', socketUrl);
-		const socket = io(socketUrl, {
-			transports: ['websocket', 'polling'],
-			timeout: 5000,
-			reconnection: true,
-			reconnectionAttempts: 5,
-			reconnectionDelay: 1000,
-		});
-
-		socketRef.current = socket;
-
-		socket.on('connect', () => {
-			console.log('[ShooterController] Connected to server with ID:', socket.id);
-			setConnected(true);
-			setConnectionStatus('connected');
-			
-			// Try to create room if it doesn't exist
-			console.log('[ShooterController] Attempting to create room:', gameId);
-			socket.emit('createRoom', {
-				gameType: 'shooter',
-				roomId: gameId,
-				config: {
-					worldWidth: 1920,
-					worldHeight: 1080,
-				},
+		// Import dynamically to get the current socket URL
+		import('@/lib/socket-utils').then(({ getSocketServerUrl }) => {
+			const socketUrl = getSocketServerUrl();
+			console.log('[ShooterController] Connecting to socket server at:', socketUrl);
+			const socket = io(socketUrl, {
+				transports: ['websocket', 'polling'],
+				timeout: 5000,
+				reconnection: true,
+				reconnectionAttempts: 5,
+				reconnectionDelay: 1000,
 			});
-		});
 
-		socket.on('disconnect', (reason) => {
-			console.log('Disconnected from server:', reason);
-			setConnected(false);
-			setConnectionStatus('disconnected');
-			setIsJoined(false);
-		});
+			socketRef.current = socket;
 
-		socket.on('connect_error', (error) => {
-			console.error('[ShooterController] Connection error:', error);
-			setConnectionStatus('disconnected');
-		});
-
-		socket.on('error', (error) => {
-			console.error('[ShooterController] Socket error:', error);
-		});
-
-		socket.on('roomCreated', (data) => {
-			console.log('[ShooterController] Room created successfully:', data);
-		});
-
-		socket.on('room:joined', (data) => {
-			console.log('[ShooterController] Player joined successfully:', data);
-			setIsJoined(true);
-			if (data.playerData) {
-				setPlayerData(data.playerData);
-				// Initialize aim direction from player data
-				if (data.playerData.aimDirection) {
-					aimDirectionRef.current = data.playerData.aimDirection;
-				}
-			}
-		});
-
-		socket.on('gameState', (state) => {
-			// Update player stats
-			const player = state.players.find((p: any) => p.id === socket.id);
-			if (player) {
-				setPlayerStats({
-					kills: player.kills,
-					deaths: player.deaths,
-					botKills: player.botKills || 0,
-					alive: player.alive,
-					effects: player.effects || {
-						speedBoost: { active: false, endTime: 0 },
-						shield: { active: false, endTime: 0 },
+			socket.on('connect', () => {
+				console.log('[ShooterController] Connected to server with ID:', socket.id);
+				setConnected(true);
+				setConnectionStatus('connected');
+			
+				// Try to create room if it doesn't exist
+				console.log('[ShooterController] Attempting to create room:', gameId);
+				socket.emit('createRoom', {
+					gameType: 'shooter',
+					roomId: gameId,
+					config: {
+						worldWidth: 1920,
+						worldHeight: 1080,
 					},
 				});
+			});
 
-				// Update player data
-				setPlayerData((prev) =>
-					prev
-						? {
-								...prev,
-								x: player.x,
-								y: player.y,
-								health: player.health,
-								facingDirection: player.facingDirection,
-								aimDirection: player.aimDirection,
-								isMoving: player.isMoving,
-						  }
-						: null
-				);
+			socket.on('disconnect', (reason) => {
+				console.log('Disconnected from server:', reason);
+				setConnected(false);
+				setConnectionStatus('disconnected');
+				setIsJoined(false);
+			});
 
-				// Update local aim direction reference
-				if (player.aimDirection) {
-					aimDirectionRef.current = player.aimDirection;
+			socket.on('connect_error', (error) => {
+				console.error('[ShooterController] Connection error:', error);
+				setConnectionStatus('disconnected');
+			});
+
+			socket.on('error', (error) => {
+				console.error('[ShooterController] Socket error:', error);
+			});
+
+			socket.on('roomCreated', (data) => {
+				console.log('[ShooterController] Room created successfully:', data);
+			});
+
+			socket.on('room:joined', (data) => {
+				console.log('[ShooterController] Player joined successfully:', data);
+				setIsJoined(true);
+				if (data.playerData) {
+					setPlayerData(data.playerData);
+					// Initialize aim direction from player data
+					if (data.playerData.aimDirection) {
+						aimDirectionRef.current = data.playerData.aimDirection;
+					}
 				}
-			}
+			});
+
+			socket.on('gameState', (state) => {
+				// Update player stats
+				const player = state.players.find((p: any) => p.id === socket.id);
+				if (player) {
+					setPlayerStats({
+						kills: player.kills,
+						deaths: player.deaths,
+						botKills: player.botKills || 0,
+						alive: player.alive,
+						effects: player.effects || {
+							speedBoost: { active: false, endTime: 0 },
+							shield: { active: false, endTime: 0 },
+						},
+					});
+
+					// Update player data
+					setPlayerData((prev) =>
+						prev
+							? {
+									...prev,
+									x: player.x,
+									y: player.y,
+									health: player.health,
+									facingDirection: player.facingDirection,
+									aimDirection: player.aimDirection,
+									isMoving: player.isMoving,
+							  }
+							: null
+					);
+
+					// Update local aim direction reference
+					if (player.aimDirection) {
+						aimDirectionRef.current = player.aimDirection;
+					}
+				}
+			});
+
+			return () => {
+				socket.disconnect();
+			};
 		});
-    
-    return () => {
-			socket.disconnect();
-    };
-  }, []);
+	}, [gameId]);
 
 	// Send input updates at regular intervals
 	useEffect(() => {
@@ -512,7 +513,7 @@ const MobileController: React.FC<MobileControllerProps> = ({
 						)}
 						{playerData?.isMoving && (
 							<div className="flex items-center space-x-1">
-								<Navigation className="w-3 h-3 text-blue-400" />
+								<FaCompass className="w-3 h-3 text-blue-400" />
 								<span className="text-blue-400 text-xs">Moving</span>
 							</div>
 						)}

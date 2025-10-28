@@ -2,7 +2,12 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { FaTrendingUp, FaBolt, FaShieldAlt, FaDatabase, Activity, FaGlobe, FaClock, FaCheckCircle } from 'react-icons/fa';
+import { FaArrowUp, FaBolt, FaShieldAlt, FaDatabase, FaExchangeAlt, FaGlobe, FaClock, FaCheckCircle } from 'react-icons/fa';
+
+const Activity = FaExchangeAlt;
+const Shield = FaShieldAlt;
+const Database = FaDatabase;
+const Zap = FaBolt;
 
 interface StatCard {
 	title: string;
@@ -90,7 +95,7 @@ export function BlockchainStats() {
 									<IconComponent className={`w-8 h-8 ${stat.color}`} />
 									{stat.trend && (
 										<Badge variant="outline" className="border-green-500/30 text-green-300 text-xs">
-											<FaTrendingUp className="w-3 h-3 mr-1" />
+											<FaArrowUp className="w-3 h-3 mr-1" />
 											{stat.trend}
 										</Badge>
 									)}

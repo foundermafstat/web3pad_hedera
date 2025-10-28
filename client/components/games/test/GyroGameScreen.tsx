@@ -86,126 +86,131 @@ const TestGyroGameScreen: React.FC<TestGyroGameScreenProps> = ({
 			serverUrl: process.env.NEXT_PUBLIC_SERVER_URL,
 		});
 
-		const socket = io(process.env.NEXT_PUBLIC_SERVER_URL!, {
-			transports: ['websocket', 'polling'],
-			reconnection: true,
-			reconnectionDelay: 1000,
-			reconnectionAttempts: 5,
-		});
-
-		socketRef.current = socket;
-
-		socket.on('connect', () => {
-			console.log('[TestGyroGameScreen] Socket connected:', socket.id);
-			setConnectionStatus('connected');
-
-			socket.emit('game:create', {
-				roomId: gameId,
-				gameType: gameType,
+		// Import dynamically to get the current socket URL
+		import('@/lib/socket-utils').then(({ getSocketServerUrl }) => {
+			const socketUrl = getSocketServerUrl();
+			console.log('[TestGyroGameScreen] Using socket URL:', socketUrl);
+			const socket = io(socketUrl, {
+				transports: ['websocket', 'polling'],
+				reconnection: true,
+				reconnectionDelay: 1000,
+				reconnectionAttempts: 5,
 			});
 
-			console.log('[TestGyroGameScreen] Game created:', gameId);
-		});
+			socketRef.current = socket;
 
-		socket.on('disconnect', () => {
-			console.log('[TestGyroGameScreen] Socket disconnected');
-			setConnectionStatus('disconnected');
-		});
+			socket.on('connect', () => {
+				console.log('[TestGyroGameScreen] Socket connected:', socket.id);
+				setConnectionStatus('connected');
 
-		socket.on('connect_error', (error) => {
-			console.error('[TestGyroGameScreen] Connection error:', error);
-			setConnectionStatus('disconnected');
-		});
+				socket.emit('game:create', {
+					roomId: gameId,
+					gameType: gameType,
+				});
 
-		// Player joined
-		socket.on('player:joined', (data: { playerId: string }) => {
-			console.log('[TestGyroGameScreen] Player joined:', data.playerId);
+				console.log('[TestGyroGameScreen] Game created:', gameId);
+			});
 
-			// Assign random color
-			const colors = [
-				'#3B82F6', // blue
-				'#EF4444', // red
-				'#10B981', // green
-				'#F59E0B', // amber
-				'#8B5CF6', // violet
-				'#EC4899', // pink
-			];
+			socket.on('disconnect', () => {
+				console.log('[TestGyroGameScreen] Socket disconnected');
+				setConnectionStatus('disconnected');
+			});
 
-			const player: Player = {
-				id: data.playerId,
-				x: CANVAS_WIDTH / 2,
-				y: CANVAS_HEIGHT / 2,
-				color: colors[playersRef.current.size % colors.length],
-				name: `Player ${playersRef.current.size + 1}`,
-				score: 0,
-			};
+			socket.on('connect_error', (error) => {
+				console.error('[TestGyroGameScreen] Connection error:', error);
+				setConnectionStatus('disconnected');
+			});
 
-			playersRef.current.set(data.playerId, player);
-			updatePlayersList();
-		});
+			// Player joined
+			socket.on('player:joined', (data: { playerId: string }) => {
+				console.log('[TestGyroGameScreen] Player joined:', data.playerId);
 
-		// Player left
-		socket.on('player:left', (data: { playerId: string }) => {
-			console.log('[TestGyroGameScreen] Player left:', data.playerId);
-			playersRef.current.delete(data.playerId);
-			updatePlayersList();
-		});
+				// Assign random color
+				const colors = [
+					'#3B82F6', // blue
+					'#EF4444', // red
+					'#10B981', // green
+					'#F59E0B', // amber
+					'#8B5CF6', // violet
+					'#EC4899', // pink
+				];
 
-		// Gyroscope data received
-		socket.on('controller:gyro', (data: GyroData) => {
-			const player = playersRef.current.get(data.playerId);
-			if (player) {
-				// Update player velocity based on device tilt
-				// gamma: -90 to 90 (left-right tilt)
-				// beta: -180 to 180 (forward-backward tilt)
-				
-				const vx = (data.gamma / 90) * MAX_SPEED * GRAVITY_SCALE;
-				const vy = (data.beta / 180) * MAX_SPEED * GRAVITY_SCALE;
-
-				// Update position
-				player.x += vx;
-				player.y += vy;
-
-				// Bounce off walls with vibration feedback
-				let hitWall = false;
-
-				if (player.x - BALL_RADIUS < 0) {
-					player.x = BALL_RADIUS;
-					hitWall = true;
-				} else if (player.x + BALL_RADIUS > CANVAS_WIDTH) {
-					player.x = CANVAS_WIDTH - BALL_RADIUS;
-					hitWall = true;
-				}
-
-				if (player.y - BALL_RADIUS < 0) {
-					player.y = BALL_RADIUS;
-					hitWall = true;
-				} else if (player.y + BALL_RADIUS > CANVAS_HEIGHT) {
-					player.y = CANVAS_HEIGHT - BALL_RADIUS;
-					hitWall = true;
-				}
-
-				// Send vibration to controller if hit wall
-				if (hitWall && socket.connected) {
-					socket.emit('game:vibrate', {
-						playerId: data.playerId,
-						duration: 50,
-					});
-					player.score += 1;
-				}
+				const player: Player = {
+					id: data.playerId,
+					x: CANVAS_WIDTH / 2,
+					y: CANVAS_HEIGHT / 2,
+					color: colors[playersRef.current.size % colors.length],
+					name: `Player ${playersRef.current.size + 1}`,
+					score: 0,
+				};
 
 				playersRef.current.set(data.playerId, player);
-			}
-		});
+				updatePlayersList();
+			});
 
-		return () => {
-			if (animationFrameRef.current) {
-				cancelAnimationFrame(animationFrameRef.current);
-			}
-			if (socket.connected) {
-				socket.disconnect();
-			}
-		};
+			// Player left
+			socket.on('player:left', (data: { playerId: string }) => {
+				console.log('[TestGyroGameScreen] Player left:', data.playerId);
+				playersRef.current.delete(data.playerId);
+				updatePlayersList();
+			});
+
+			// Gyroscope data received
+			socket.on('controller:gyro', (data: GyroData) => {
+				const player = playersRef.current.get(data.playerId);
+				if (player) {
+					// Update player velocity based on device tilt
+					// gamma: -90 to 90 (left-right tilt)
+					// beta: -180 to 180 (forward-backward tilt)
+					
+					const vx = (data.gamma / 90) * MAX_SPEED * GRAVITY_SCALE;
+					const vy = (data.beta / 180) * MAX_SPEED * GRAVITY_SCALE;
+
+					// Update position
+					player.x += vx;
+					player.y += vy;
+
+					// Bounce off walls with vibration feedback
+					let hitWall = false;
+
+					if (player.x - BALL_RADIUS < 0) {
+						player.x = BALL_RADIUS;
+						hitWall = true;
+					} else if (player.x + BALL_RADIUS > CANVAS_WIDTH) {
+						player.x = CANVAS_WIDTH - BALL_RADIUS;
+						hitWall = true;
+					}
+
+					if (player.y - BALL_RADIUS < 0) {
+						player.y = BALL_RADIUS;
+						hitWall = true;
+					} else if (player.y + BALL_RADIUS > CANVAS_HEIGHT) {
+						player.y = CANVAS_HEIGHT - BALL_RADIUS;
+						hitWall = true;
+					}
+
+					// Send vibration to controller if hit wall
+					if (hitWall && socket.connected) {
+						socket.emit('game:vibrate', {
+							playerId: data.playerId,
+							duration: 50,
+						});
+						player.score += 1;
+					}
+
+					playersRef.current.set(data.playerId, player);
+				}
+			});
+
+			return () => {
+				if (animationFrameRef.current) {
+					cancelAnimationFrame(animationFrameRef.current);
+				}
+				if (socket.connected) {
+					socket.disconnect();
+				}
+			};
+		});
 	}, [gameId, gameType, isMounted]);
 
 	// Update players list state

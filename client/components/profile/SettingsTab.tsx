@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '../ui/button';
 import { FaUpload, FaUser, FaEnvelope, FaShieldAlt, FaLayerGroup, FaCheckCircle } from 'react-icons/fa';
 import { WalletConnection } from '../WalletConnection';
-import { BlockchainWalletAuth } from '../auth/BlockchainWalletAuth';
+// Removed broken import for WalletConnection
 
 interface SettingsTabProps {
 	user: {
@@ -14,6 +14,7 @@ interface SettingsTabProps {
 		avatar?: string;
 		blockchainConnected?: boolean;
 		wallets?: Array<{
+			id: string;
 			address: string;
 			type: string;
 			network?: string;
@@ -80,7 +81,9 @@ export function SettingsTab({ user }: SettingsTabProps) {
 				headers: {
 					'Content-Type': 'application/json',
 				},
-				body: JSON.stringify({ walletId: primaryWallet.address }),
+				body: JSON.stringify({ 
+					walletId: primaryWallet.id || (primaryWallet as any).id || primaryWallet.address 
+				}),
 			});
 
 			if (!response.ok) {

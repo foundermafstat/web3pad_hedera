@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FaClock, FaUsers, FaGamepad, FaStar, FaArrowLeft, FaPlay, FaImage as ImageIcon, FaVideo as Video, FaTrophy, FaBullseye, FaBolt, FaCheckCircle, FaLightbulb as Lightbulb, FaAward, FaTrendingUp, FaChartBar, FaCrown, FaMedal } from 'react-icons/fa';
+import { FaClock, FaUsers, FaGamepad, FaStar, FaArrowLeft, FaPlay, FaImage as ImageIcon, FaVideo as Video, FaTrophy, FaBullseye, FaBolt, FaCheckCircle, FaLightbulb as Lightbulb, FaAward, FaArrowUp, FaChartBar, FaCrown, FaMedal } from 'react-icons/fa';
 
 interface GameAchievement {
 	id: string;
@@ -612,7 +612,7 @@ export function GameDetailView({ gameCode }: GameDetailViewProps) {
 										<div className="text-3xl font-bold mb-1">1,247</div>
 										<div className="text-sm text-muted-foreground">Total Players</div>
 										<div className="flex items-center justify-center gap-1 mt-2 text-xs text-green-500">
-											<FaTrendingUp className="w-3 h-3" />
+											<FaArrowUp className="w-3 h-3" />
 											<span>+12% this week</span>
 										</div>
 									</CardContent>
@@ -626,7 +626,7 @@ export function GameDetailView({ gameCode }: GameDetailViewProps) {
 										<div className="text-3xl font-bold mb-1">4,832</div>
 										<div className="text-sm text-muted-foreground">Matches Played</div>
 										<div className="flex items-center justify-center gap-1 mt-2 text-xs text-green-500">
-											<FaTrendingUp className="w-3 h-3" />
+											<FaArrowUp className="w-3 h-3" />
 											<span>+23% this week</span>
 										</div>
 									</CardContent>

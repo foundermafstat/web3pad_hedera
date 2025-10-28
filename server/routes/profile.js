@@ -23,6 +23,7 @@ router.get('/profile/:username', async (req, res) => {
 				createdAt: true,
 				wallets: {
 					select: {
+						id: true,
 						address: true,
 						type: true,
 						network: true,

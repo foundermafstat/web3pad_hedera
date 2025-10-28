@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { FaArrowLeft, FaUsers, FaHeart, Coins, Waves as WavesIcon, FaWifi, FaQrcode, FaPlay } from 'react-icons/fa';
+import { FaArrowLeft, FaUsers, FaHeart, FaDollarSign, FaWaveSquare as WavesIcon, FaWifi, FaQrcode, FaPlay } from 'react-icons/fa';
 import dynamic from 'next/dynamic';
 
 const GameQRSheet = dynamic(
@@ -89,13 +89,13 @@ export default function TowerDefenceGameScreen({
 			app.stage.addChild(gameContainer);
 			gameContainerRef.current = gameContainer;
 
-		// Connect socket
-		const socket = io(
-			process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001',
-			{
+			// Connect socket
+			const { getSocketServerUrl } = await import('@/lib/socket-utils');
+			const socketUrl = getSocketServerUrl();
+			console.log('[TowerDefence] Using socket URL:', socketUrl);
+			const socket = io(socketUrl, {
 				transports: ['websocket', 'polling'],
-				}
-			);
+			});
 
 			socket.on('connect', () => {
 				console.log('[TowerDefence] Connected');

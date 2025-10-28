@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { FaArrowLeft, FaUsers, FaBolt, FaQrcode, FaWifi, FaHeart, Coins, Waves as WavesIcon, FaPlay, FaTrophy, FaClock } from 'react-icons/fa';
+import { FaArrowLeft, FaUsers, FaBolt, FaQrcode, FaWifi, FaHeart, FaDollarSign, FaWaveSquare as WavesIcon, FaPlay, FaTrophy, FaClock } from 'react-icons/fa';
 
 interface GameInterfaceHeaderProps {
 	onBack: () => void;
@@ -91,7 +91,7 @@ export default function GameInterfaceHeader({
 				return (
 					<>
 						<div className="flex items-center space-x-1 text-yellow-400">
-							<Coins className="w-4 h-4" />
+							<FaDollarSign className="w-4 h-4" />
 							<span>{money}</span>
 						</div>
 						<div className="flex items-center space-x-1 text-red-400">

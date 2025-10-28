@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { io, Socket } from 'socket.io-client';
+import io, { Socket } from 'socket.io-client';
 import { FaGamepad, FaFlag, FaTrophy, FaWifi, FaTachometerAlt } from 'react-icons/fa';
 
 interface RaceMobileControllerProps {
@@ -64,78 +64,87 @@ const RaceMobileController: React.FC<RaceMobileControllerProps> = ({
 	}, []);
 
 	useEffect(() => {
-		const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001';
-		console.log('Connecting to socket server at:', socketUrl);
-		const socket = io(socketUrl, {
-			transports: ['websocket', 'polling'],
-			timeout: 5000,
-			reconnection: true,
-			reconnectionAttempts: 5,
-			reconnectionDelay: 1000,
-		});
-
-		socketRef.current = socket;
-
-		socket.on('connect', () => {
-			console.log('[RaceController] Connected to server with ID:', socket.id);
-			setConnected(true);
-			setConnectionStatus('connected');
-			
-			console.log('[RaceController] Attempting to create room:', gameId);
-			socket.emit('createRoom', {
-				gameType: 'race',
-				roomId: gameId,
-				config: {
-					worldWidth: 1920,
-					worldHeight: 1080,
-				},
+		// Import dynamically to get the current socket URL
+		import('@/lib/socket-utils').then(({ getSocketServerUrl }) => {
+			const socketUrl = getSocketServerUrl();
+			console.log('[RaceController] Connecting to socket server at:', socketUrl);
+			console.log('[RaceController] Game ID:', gameId);
+			const socket = io(socketUrl, {
+				transports: ['websocket', 'polling'],
+				timeout: 20000,
+				reconnection: true,
+				reconnectionAttempts: 10,
+				reconnectionDelay: 1000,
+				forceNew: false,
 			});
-		});
 
-		socket.on('disconnect', (reason) => {
-			console.log('Disconnected from server:', reason);
-			setConnected(false);
-			setConnectionStatus('disconnected');
-			setIsJoined(false);
-		});
+			socketRef.current = socket;
 
-		socket.on('connect_error', (error) => {
-			console.error('[RaceController] Connection error:', error);
-			setConnectionStatus('disconnected');
-		});
+			socket.on('connect', () => {
+				console.log('[RaceController] Connected to server with ID:', socket.id);
+				setConnected(true);
+				setConnectionStatus('connected');
+				
+				console.log('[RaceController] Attempting to create room:', gameId);
+				socket.emit('createRoom', {
+					gameType: 'race',
+					roomId: gameId,
+					config: {
+						worldWidth: 1920,
+						worldHeight: 1080,
+					},
+				});
+			});
 
-		socket.on('roomCreated', (data) => {
-			console.log('[RaceController] Room created successfully:', data);
-		});
+			socket.on('disconnect', (reason) => {
+				console.log('[RaceController] Disconnected from server:', reason);
+				setConnected(false);
+				setConnectionStatus('disconnected');
+				setIsJoined(false);
+			});
 
-		socket.on('room:joined', (data) => {
-			console.log('Player joined successfully:', data);
-			setIsJoined(true);
-			if (data.playerData) {
-				setPlayerData(data.playerData);
-			}
-		});
+			socket.on('connect_error', (error) => {
+				console.error('[RaceController] Connection error:', error);
+				setConnectionStatus('disconnected');
+			});
 
-		socket.on('gameState', (state) => {
-			const player = state.players.find((p: any) => p.id === socket.id);
-			if (player) {
-				setPlayerData(player);
-			}
-		});
+			socket.on('roomCreated', (data) => {
+				console.log('[RaceController] Room created successfully:', data);
+			});
 
-		socket.on('collision', (data) => {
-			console.log('[RaceController] Collision detected:', data);
-			// Play crash sound
-			if (crashAudioRef.current) {
-				crashAudioRef.current.currentTime = 0;
-				crashAudioRef.current.play().catch(err => console.log('Crash audio play failed:', err));
-			}
-		});
+			socket.on('error', (error) => {
+				console.error('[RaceController] Socket error:', error);
+			});
 
-		return () => {
-			socket.disconnect();
-		};
-	}, []);
+			socket.on('room:joined', (data) => {
+				console.log('[RaceController] Player joined successfully:', data);
+				setIsJoined(true);
+				if (data.playerData) {
+					setPlayerData(data.playerData);
+				}
+			});
+
+			socket.on('gameState', (state) => {
+				const player = state.players.find((p: any) => p.id === socket.id);
+				if (player) {
+					setPlayerData(player);
+				}
+			});
+
+			socket.on('collision', (data) => {
+				console.log('[RaceController] Collision detected:', data);
+				// Play crash sound
+				if (crashAudioRef.current) {
+					crashAudioRef.current.currentTime = 0;
+					crashAudioRef.current.play().catch(err => console.log('Crash audio play failed:', err));
+				}
+			});
+
+			return () => {
+				socket.disconnect();
+			};
+		});
+	}, [gameId]);
 
 	// Send input updates
 	useEffect(() => {
@@ -186,10 +195,16 @@ const RaceMobileController: React.FC<RaceMobileControllerProps> = ({
 
 	const joinGame = () => {
 		if (socketRef.current && playerName.trim() && connected) {
-			console.log('Attempting to join room with name:', playerName.trim());
+			console.log('[RaceController] Attempting to join room:', gameId, 'with name:', playerName.trim());
 			socketRef.current.emit('room:join', {
 				roomId: gameId,
 				playerName: playerName.trim(),
+			});
+		} else {
+			console.error('[RaceController] Cannot join game:', {
+				socket: !!socketRef.current,
+				playerName: playerName.trim(),
+				connected
 			});
 		}
 	};

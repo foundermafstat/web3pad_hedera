@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { FaBrain, FaTrophy, FaWifi, FaCheckCircle, FaClock, FaMedal, FaAward, FaGamepad, FaTimesCircle, FaStepForward } from 'react-icons/fa';
-import BlockchainAddressModal from '@/components/BlockchainAddressModal';
+import { BlockchainAddressModal } from '@/components/BlockchainAddressModal';
 import BlockchainStatus from '@/components/BlockchainStatus';
 
 interface QuizMobileControllerProps {
@@ -67,67 +67,70 @@ const QuizMobileController: React.FC<QuizMobileControllerProps> = ({
 	const socketRef = useRef<Socket | null>(null);
 
 	useEffect(() => {
-		const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001';
-		console.log('Connecting to socket server at:', socketUrl);
-		const socket = io(socketUrl, {
-			transports: ['websocket', 'polling'],
-			timeout: 5000,
-			reconnection: true,
-			reconnectionAttempts: 5,
-			reconnectionDelay: 1000,
-		});
+		// Import dynamically to get the current socket URL
+		import('@/lib/socket-utils').then(({ getSocketServerUrl }) => {
+			const socketUrl = getSocketServerUrl();
+			console.log('[QuizController] Connecting to socket server at:', socketUrl);
+			const socket = io(socketUrl, {
+				transports: ['websocket', 'polling'],
+				timeout: 5000,
+				reconnection: true,
+				reconnectionAttempts: 5,
+				reconnectionDelay: 1000,
+			});
 
-		socketRef.current = socket;
+			socketRef.current = socket;
 
-		socket.on('connect', () => {
-			console.log('Connected to server with ID:', socket.id);
-			setConnected(true);
-			setConnectionStatus('connected');
-		});
+			socket.on('connect', () => {
+				console.log('Connected to server with ID:', socket.id);
+				setConnected(true);
+				setConnectionStatus('connected');
+			});
 
-		socket.on('disconnect', (reason) => {
-			console.log('Disconnected from server:', reason);
-			setConnected(false);
-			setConnectionStatus('disconnected');
-			setIsJoined(false);
-		});
+			socket.on('disconnect', (reason) => {
+				console.log('Disconnected from server:', reason);
+				setConnected(false);
+				setConnectionStatus('disconnected');
+				setIsJoined(false);
+			});
 
-		socket.on('connect_error', (error) => {
-			console.error('Connection error:', error);
-			setConnectionStatus('disconnected');
-		});
+			socket.on('connect_error', (error) => {
+				console.error('Connection error:', error);
+				setConnectionStatus('disconnected');
+			});
 
-		socket.on('playerJoined', (data) => {
-			console.log('Player joined successfully:', data);
-			setIsJoined(true);
-			if (data.playerData) {
-				setPlayerData(data.playerData);
-			}
-		});
-
-		socket.on('gameState', (state: GameState) => {
-			console.log('Game state received:', state);
-			setGameState(state);
-
-			// Update player data
-			const player = state.players?.find((p) => p.id === socket.id);
-			if (player) {
-				setPlayerData(player);
-			}
-
-			// Reset answer state when new round starts
-			if (state.gameStarted && !state.showingResults && state.question) {
-				if (gameState?.currentRound !== state.currentRound) {
-					setSelectedAnswer(null);
-					setHasAnswered(false);
+			socket.on('playerJoined', (data) => {
+				console.log('Player joined successfully:', data);
+				setIsJoined(true);
+				if (data.playerData) {
+					setPlayerData(data.playerData);
 				}
-			}
-		});
+			});
 
-		return () => {
-			socket.disconnect();
-		};
-	}, []);
+			socket.on('gameState', (state: GameState) => {
+				console.log('Game state received:', state);
+				setGameState(state);
+
+				// Update player data
+				const player = state.players?.find((p) => p.id === socket.id);
+				if (player) {
+					setPlayerData(player);
+				}
+
+				// Reset answer state when new round starts
+				if (state.gameStarted && !state.showingResults && state.question) {
+					if (gameState?.currentRound !== state.currentRound) {
+						setSelectedAnswer(null);
+						setHasAnswered(false);
+					}
+				}
+			});
+
+			return () => {
+				socket.disconnect();
+			};
+		});
+	}, [gameState]);
 
 	const joinGame = () => {
 		if (socketRef.current && playerName.trim() && connected) {

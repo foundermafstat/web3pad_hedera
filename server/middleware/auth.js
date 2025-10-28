@@ -102,6 +102,7 @@ export async function getUserFromRequest(req) {
 				coins: true,
 				wallets: {
 					select: {
+						id: true,
 						address: true,
 						type: true,
 						network: true,

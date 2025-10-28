@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { io, Socket } from 'socket.io-client';
-import { FaMobile, FaWifi, FaVibrate, FaGamepad } from 'react-icons/fa';
+import { FaMobile, FaWifi, FaMobileAlt, FaGamepad } from 'react-icons/fa';
 import AuthModal from '@/components/AuthModal';
 
 interface TestGyroMobileControllerProps {
@@ -141,11 +141,15 @@ const TestGyroMobileController: React.FC<TestGyroMobileControllerProps> = ({
 			serverUrl: process.env.NEXT_PUBLIC_SERVER_URL,
 		});
 
-		const socket = io(process.env.NEXT_PUBLIC_SERVER_URL!, {
-			transports: ['websocket', 'polling'],
-			reconnection: true,
-			reconnectionDelay: 1000,
-			reconnectionAttempts: 5,
+		// Import dynamically to get the current socket URL
+		import('@/lib/socket-utils').then(({ getSocketServerUrl }) => {
+			const socketUrl = getSocketServerUrl();
+			console.log('[TestGyroController] Using socket URL:', socketUrl);
+			const socket = io(socketUrl, {
+				transports: ['websocket', 'polling'],
+				reconnection: true,
+				reconnectionDelay: 1000,
+				reconnectionAttempts: 5,
 		});
 
 		socketRef.current = socket;
@@ -194,6 +198,7 @@ const TestGyroMobileController: React.FC<TestGyroMobileControllerProps> = ({
 				socket.disconnect();
 			}
 		};
+	});
 	}, [gameId, gameType, isMounted]);
 
 	// Test vibration
@@ -349,7 +354,7 @@ const TestGyroMobileController: React.FC<TestGyroMobileControllerProps> = ({
 							onClick={testVibration}
 							className="w-full py-3 bg-gradient-to-r from-pink-500 to-rose-500 text-white rounded-md font-semibold shadow-lg hover:shadow-xl transition-all flex items-center justify-center space-x-2"
 						>
-							<FaVibrate className="w-5 h-5" />
+							<FaMobileAlt className="w-5 h-5" />
 							<span>Test Vibration</span>
 						</button>
 					)}

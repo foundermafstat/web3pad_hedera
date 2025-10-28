@@ -69,6 +69,9 @@ export async function DELETE(request: NextRequest) {
 			headers: {
 				'Content-Type': 'application/json',
 			},
+			body: JSON.stringify({
+				userId: session.user.id
+			}),
 		});
 
 		if (!response.ok) {
