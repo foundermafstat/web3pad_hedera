@@ -1,0 +1,11 @@
+{
+  "cache": {
+    "enabled": true,
+    "maxMemoryEntries": 1000,
+    "path": "./cache"
+  },
+  "compiler": {
+    "cache": true,
+    "incremental": true
+  }
+}
