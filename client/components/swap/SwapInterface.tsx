@@ -13,6 +13,7 @@ import { blockchainService } from '@/lib/blockchain';
 import { hederaClient } from '@/lib/hedera-client';
 import { hashpackUtils } from '@/lib/hashpack-utils';
 import { authenticatedWalletUtils } from '@/lib/authenticated-wallet-utils';
+import { useWallet } from '@/contexts/WalletContext';
 
 interface SwapRate {
   hbarToHplayRate: number;
@@ -30,6 +31,7 @@ interface UserSwapInfo {
 
 export function SwapInterface() {
   const { data: session, status } = useSession();
+  const wallet = useWallet();
   const [hbarAmount, setHbarAmount] = useState('');
   const [hplayAmount, setHplayAmount] = useState('');
   const [swapRate, setSwapRate] = useState<SwapRate | null>(null);
@@ -41,7 +43,7 @@ export function SwapInterface() {
   const [hplayBalance, setHplayBalance] = useState<number>(0);
   const [isConnecting, setIsConnecting] = useState(false);
 
-  // Get wallet data from authenticated session
+  // Get wallet data from authenticated session as fallback
   const walletData = authenticatedWalletUtils.getWalletFromSession(session);
 
   // Load swap rate and user info on component mount
@@ -62,14 +64,15 @@ export function SwapInterface() {
     }
   }, [hbarAmount, swapRate]);
 
-  // Load user swap info when session is available
+  // Load user swap info when wallet is connected
   useEffect(() => {
-    if (session?.user && walletData.isAuthenticated && walletData.wallet?.address) {
-      loadUserSwapInfo(walletData.wallet?.address || '');
-      loadHbarBalance(walletData.wallet?.address || '');
-      loadHplayBalance(walletData.wallet?.address || '');
+    const walletAddress = wallet.walletAddress || walletData.wallet?.address;
+    if (session?.user && walletAddress) {
+      loadUserSwapInfo(walletAddress);
+      loadHbarBalance(walletAddress);
+      loadHplayBalance(walletAddress);
     }
-  }, [session, walletData]);
+  }, [session, wallet.walletAddress, wallet.isConnected, walletData]);
 
   const loadSwapData = async () => {
     try {
@@ -132,8 +135,15 @@ export function SwapInterface() {
   };
 
   const handleSwap = async () => {
-    if (!walletData || !hbarAmount || !swapRate) {
+    const walletAddress = wallet.walletAddress || walletData.wallet?.address;
+    
+    if (!walletAddress || !hbarAmount || !swapRate) {
       setError('Заполните все поля');
+      return;
+    }
+
+    if (!wallet.isConnected && !walletData.isAuthenticated) {
+      setError('Кошелек не подключен. Пожалуйста, авторизуйтесь через кошелек.');
       return;
     }
 
@@ -164,17 +174,18 @@ export function SwapInterface() {
 
     try {
       // Execute real swap transaction through FaucetManager contract
-      const swapResult = await executeRealSwap(walletData.wallet?.address || '', amount);
+      const swapResult = await executeRealSwap(walletAddress, amount);
       
-      setSuccess(`✅ Успешно обменено ${hbarAmount} HBAR на ${swapResult.hplayAmount} HPLAY! Транзакция: ${swapResult.transactionId}${(swapResult as any).walletType ? ` (реальная транзакция через ${(swapResult as any).walletType})` : ''}`);
+      const walletTypeUsed = (swapResult as any).walletType || wallet.walletType || 'кошелек';
+      setSuccess(`✅ Успешно обменено ${hbarAmount} HBAR на ${swapResult.hplayAmount} HPLAY! Транзакция: ${swapResult.transactionId} (реальная транзакция через ${walletTypeUsed})`);
       setHbarAmount('');
       setHplayAmount('');
       
       // Reload user info and balances
-      if (walletData.wallet?.address) {
-        loadUserSwapInfo(walletData.wallet.address);
-        loadHbarBalance(walletData.wallet.address);
-        loadHplayBalance(walletData.wallet.address);
+      if (walletAddress) {
+        loadUserSwapInfo(walletAddress);
+        loadHbarBalance(walletAddress);
+        loadHplayBalance(walletAddress);
       }
     } catch (error: any) {
       setError(error.message || 'Ошибка обмена токенов. Проверьте подключение к сети и баланс.');
@@ -229,18 +240,28 @@ export function SwapInterface() {
         hasTransactionData: !!transactionData.transactionData
       });
 
-      // Check if user has authenticated wallet from session
-      const signingContext = authenticatedWalletUtils.createSigningContext(session);
-      console.log('🔍 Authenticated wallet context:', signingContext);
+      // Use global wallet state - this is the source of truth
+      const walletAddress = wallet.walletAddress || walletData.wallet?.address;
+      const network = wallet.network || walletData.wallet?.network || 'testnet';
+      const walletType = wallet.walletType;
 
-      if (!signingContext.canSign) {
-        throw new Error(signingContext.error || 'Кошелек не может подписывать транзакции');
+      console.log('🔍 Using global wallet state:', {
+        isConnected: wallet.isConnected,
+        walletAddress,
+        network,
+        walletType,
+        hasDAppConnector: !!wallet.dAppConnector,
+        hasCurrentSession: !!wallet.currentSession
+      });
+
+      if (!wallet.isConnected && !walletAddress) {
+        throw new Error('Кошелек не подключен. Пожалуйста, авторизуйтесь через кошелек.');
       }
 
-      console.log('✅ User has authenticated wallet:', {
-        address: signingContext.walletAddress,
-        network: signingContext.network,
-        walletType: signingContext.walletType
+      console.log('✅ Wallet state confirmed:', {
+        address: walletAddress,
+        network,
+        walletType
       });
 
       // Convert transaction data to Uint8Array if needed
@@ -308,79 +329,60 @@ export function SwapInterface() {
         firstBytes: Array.from(transactionBytes.slice(0, 10))
       });
 
-      // Step 1: Try WalletConnect session first (user authenticated via wallet connection)
-      console.log('🔍 Checking active WalletConnect session...');
-      
-      // Always initialize hederaService first for the current network
-      try {
-        await hederaService.init(signingContext.network as 'mainnet' | 'testnet');
-      } catch (initError) {
-        console.warn('⚠️ Failed to initialize hederaService, will try browser wallets:', initError);
-      }
-      
-      const hasActiveSession = hederaService.hasActiveSession();
-      console.log('WalletConnect session active:', hasActiveSession);
+      // Step 1: Use global wallet state first (if WalletConnect)
+      console.log('🔍 Using global wallet state for signing...');
+      let walletConnectError: Error | null = null;
 
-      if (hasActiveSession) {
-        const sessionWalletAddress = hederaService.getCurrentWalletAddress();
-        console.log('WalletConnect session wallet address:', sessionWalletAddress);
-        console.log('Authenticated wallet address:', signingContext.walletAddress);
+      if (wallet.isConnected && wallet.walletType === 'walletconnect' && wallet.walletAddress === walletAddress) {
+        try {
+          console.log('🔗 Attempting to sign with global WalletConnect state...');
+          console.log('🔗 Wallet state:', {
+            address: wallet.walletAddress,
+            network: wallet.network,
+            walletType: wallet.walletType,
+            hasDAppConnector: !!wallet.dAppConnector,
+            hasCurrentSession: !!wallet.currentSession
+          });
+          
+          // Use global wallet's signTransaction method
+          const signature = await wallet.signTransaction(transactionBytes, walletAddress);
 
-        // Verify account matches authenticated wallet
-        if (sessionWalletAddress === signingContext.walletAddress) {
-          try {
-            console.log('🔗 Attempting to sign with WalletConnect session...');
-            
-            // Add timeout for signing (30 seconds)
-            const walletAddressForSigning = signingContext.walletAddress;
-            if (!walletAddressForSigning) {
-              throw new Error('Wallet address is not available');
-            }
-            
-            const signingPromise = hederaService.signTransaction(
-              transactionBytes,
-              walletAddressForSigning
-            );
-            
-            const timeoutPromise = new Promise((_, reject) => {
-              setTimeout(() => reject(new Error('Transaction signing timeout. Please try again.')), 30000);
-            });
-            
-            const signature = await Promise.race([signingPromise, timeoutPromise]) as any;
+          console.log('✅ Transaction signed successfully via global WalletConnect state:', signature);
 
-            console.log('✅ Transaction signed successfully via WalletConnect:', signature);
-
-            // Validate signature response
-            if (!signature || (!signature.signature && !signature.signatureMap)) {
-              throw new Error('Invalid signature response from wallet');
-            }
-
-            return {
-              signature: signature.signature || signature.signatureMap || '',
-              accountId: signature.accountId || signingContext.walletAddress,
-              transactionId: signature.transactionId || '',
-              walletType: signature.walletType || 'walletconnect',
-              isRealTransaction: true,
-              timestamp: Date.now()
-            };
-          } catch (error: any) {
-            walletConnectError = error instanceof Error ? error : new Error(String(error));
-            console.error('❌ WalletConnect signing error:', error);
-            // For some errors, fall through to try other wallets
-            const errorMessage = error?.message || '';
-            if (errorMessage?.includes('timeout') || errorMessage?.includes('cancelled') || errorMessage?.includes('denied') || errorMessage?.includes('rejected')) {
-              // User rejection or timeout - don't try other wallets
-              throw error;
-            }
-            // For other errors, try fallback to browser wallets
-            console.log('⚠️ Falling back to browser wallet due to WalletConnect error...');
+          // Validate signature response
+          if (!signature || (!signature.signature && !signature.signatureMap)) {
+            throw new Error('Invalid signature response from wallet');
           }
-        } else {
-          console.warn(`⚠️ Wallet address mismatch. Session: ${sessionWalletAddress}, Auth: ${signingContext.walletAddress}`);
-          console.log('⚠️ Falling back to browser wallet...');
+
+          return {
+            signature: signature.signature || signature.signatureMap || '',
+            accountId: signature.accountId || walletAddress,
+            transactionId: signature.transactionId || '',
+            walletType: signature.walletType || 'walletconnect',
+            isRealTransaction: true,
+            timestamp: Date.now()
+          };
+        } catch (error: any) {
+          walletConnectError = error instanceof Error ? error : new Error(String(error));
+          console.error('❌ Global WalletConnect signing error:', error);
+          
+          // For user rejection or timeout - don't try other wallets
+          const errorMessage = error?.message || '';
+          if (errorMessage?.includes('timeout') || errorMessage?.includes('cancelled') || 
+              errorMessage?.includes('denied') || errorMessage?.includes('rejected')) {
+            throw error;
+          }
+          
+          // For other errors, try fallback to browser wallets
+          console.log('⚠️ Falling back to browser wallet due to WalletConnect error...');
         }
       } else {
-        console.log('⚠️ No active WalletConnect session. WalletConnect session may expire after authentication. Trying browser wallets...');
+        console.log('⚠️ Global wallet state not available for WalletConnect:', {
+          isConnected: wallet.isConnected,
+          walletType: wallet.walletType,
+          addressMatch: wallet.walletAddress === walletAddress
+        });
+        console.log('⚠️ Will try browser wallets...');
       }
 
       // Step 2: Try HashPack (browser extension)
@@ -420,17 +422,17 @@ export function SwapInterface() {
           }
           
           // Verify account matches authenticated wallet
-          if (currentAccount.accountId !== signingContext.walletAddress) {
+          if (currentAccount.accountId !== walletAddress) {
             console.error('❌ Account mismatch:', {
-              expected: signingContext.walletAddress,
+              expected: walletAddress,
               found: currentAccount.accountId
             });
-            throw new Error(`Несоответствие аккаунтов. Ожидается: ${signingContext.walletAddress}, Найден в HashPack: ${currentAccount.accountId}. Пожалуйста, выберите правильный аккаунт в HashPack.`);
+            throw new Error(`Несоответствие аккаунтов. Ожидается: ${walletAddress}, Найден в HashPack: ${currentAccount.accountId}. Пожалуйста, выберите правильный аккаунт в HashPack.`);
           }
           
           console.log('📝 Signing transaction with HashPack:', {
             accountId: currentAccount.accountId,
-            network: signingContext.network,
+            network: network,
             bytesLength: transactionBytes.length
           });
           
@@ -438,7 +440,7 @@ export function SwapInterface() {
           const signingPromise = hashpackUtils.signTransaction(
             transactionBytes,
             currentAccount.accountId,
-            signingContext.network
+            network
           );
           
           const timeoutPromise = new Promise((_, reject) => {
@@ -492,8 +494,8 @@ export function SwapInterface() {
             method: 'hedera_signTransaction',
             params: {
               bytes: transactionBytes,
-              accountId: signingContext.walletAddress,
-              network: signingContext.network
+              accountId: walletAddress,
+              network: network
             }
           });
           
@@ -501,7 +503,7 @@ export function SwapInterface() {
           return {
             ...result,
             walletType: 'blade',
-            accountId: signingContext.walletAddress,
+            accountId: walletAddress,
             isRealTransaction: true
           };
         } catch (error: unknown) {
@@ -514,14 +516,14 @@ export function SwapInterface() {
       // If we reach here, none of the wallet methods worked
       // Provide helpful error message with detailed information
       const walletMethods = [];
-      if (hasActiveSession) walletMethods.push('WalletConnect (сессия активна)');
+      if (wallet.isConnected && wallet.walletType === 'walletconnect') walletMethods.push('WalletConnect (подключен)');
       if (hashpackAvailable) walletMethods.push('HashPack (расширение найдено)');
       if (typeof window !== 'undefined' && (window as any).blade) walletMethods.push('Blade (расширение найдено)');
       
       const errorDetails = walletConnectError ? `\n\nWalletConnect error: ${walletConnectError.message}` : '';
       const availableMethods = walletMethods.length > 0 ? `\nНайдены кошельки: ${walletMethods.join(', ')}` : '\nКошельки не найдены в браузере';
       
-      throw new Error(`Не удалось подписать транзакцию через доступные кошельки.${errorDetails}${availableMethods}\n\nРекомендации:\n1. Если используете HashPack: откройте расширение HashPack и убедитесь, что выбран правильный аккаунт (${signingContext.walletAddress})\n2. Если используете WalletConnect: переподключите кошелек через авторизацию\n3. Убедитесь, что используется правильная сеть (${signingContext.network === 'testnet' ? 'Testnet' : 'Mainnet'})\n4. Проверьте, что кошелек подключен и активен`);
+      throw new Error(`Не удалось подписать транзакцию через доступные кошельки.${errorDetails}${availableMethods}\n\nРекомендации:\n1. Если используете HashPack: откройте расширение HashPack и убедитесь, что выбран правильный аккаунт (${walletAddress})\n2. Если используете WalletConnect: переподключите кошелек через авторизацию\n3. Убедитесь, что используется правильная сеть (${network === 'testnet' ? 'Testnet' : 'Mainnet'})\n4. Проверьте, что кошелек подключен и активен`);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       throw new Error(`Ошибка подписи транзакции: ${errorMessage}`);
@@ -611,11 +613,16 @@ export function SwapInterface() {
                     Пользователь: {session.user.name || session.user.email}
                   </p>
                   <p className="text-sm text-gray-300">
-                    Адрес: {walletData.wallet?.address || 'Не указан'}
+                    Адрес: {wallet.walletAddress || walletData.wallet?.address || 'Не указан'}
                   </p>
                   <p className="text-sm text-gray-300">
-                    Сеть: {walletData.wallet?.network === 'testnet' ? 'Testnet' : 'Mainnet'}
+                    Сеть: {(wallet.network || walletData.wallet?.network) === 'testnet' ? 'Testnet' : 'Mainnet'}
                   </p>
+                  {wallet.walletType && (
+                    <p className="text-sm text-gray-300">
+                      Кошелек: {wallet.walletType === 'walletconnect' ? 'WalletConnect' : wallet.walletType === 'hashpack' ? 'HashPack' : wallet.walletType}
+                    </p>
+                  )}
                 </div>
 
                 {/* HBAR Balance */}

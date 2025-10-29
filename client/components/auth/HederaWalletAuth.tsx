@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from '../ui/alert';
 import { FaWallet, FaCheck, FaExclamationTriangle } from 'react-icons/fa';
 import { Loader2 } from 'lucide-react';
 import hederaService from '../../lib/hedera';
+import { useWallet } from '@/contexts/WalletContext';
 
 interface HederaWalletAuthProps {
 	onSuccess?: () => void;
@@ -17,6 +18,7 @@ interface HederaWalletAuthProps {
 export function HederaWalletAuth({ onSuccess, onError, network = 'testnet' }: HederaWalletAuthProps) {
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const { connectWallet, refreshWalletState } = useWallet();
 
 	const handleConnect = async () => {
 		setLoading(true);
@@ -83,6 +85,20 @@ export function HederaWalletAuth({ onSuccess, onError, network = 'testnet' }: He
 			
 			if (result?.ok) {
 				console.log('[HederaWalletAuth] Authentication successful via wallet connection');
+				
+				// Save wallet connection state to global context
+				try {
+					await connectWallet(authData.network || network);
+					console.log('[HederaWalletAuth] Wallet state saved to global context');
+				} catch (stateError) {
+					console.warn('[HederaWalletAuth] Failed to save wallet state, but auth succeeded:', stateError);
+				}
+				
+				// Refresh wallet state to ensure it's synced
+				setTimeout(() => {
+					refreshWalletState();
+				}, 1000);
+				
 				if (onSuccess) onSuccess();
 			} else {
 				const errorMessage = result?.error || 'Не удалось авторизоваться через кошелек';

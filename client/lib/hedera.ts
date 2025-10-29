@@ -322,22 +322,39 @@ export class HederaService {
 
   /**
    * Check if there's an active WalletConnect session
+   * Try to recover session from WalletConnect client if currentSession is lost
    */
   hasActiveSession(): boolean {
-    if (!this.dAppConnector || !this.currentSession) {
-      return false;
-    }
-
     try {
-      const walletConnectClient = (this.dAppConnector as any).walletConnectClient;
-      if (!walletConnectClient?.session) {
-        return false;
+      // First, try with currentSession if available
+      if (this.dAppConnector && this.currentSession) {
+        const walletConnectClient = (this.dAppConnector as any).walletConnectClient;
+        if (walletConnectClient?.session) {
+          const session = walletConnectClient.session.get(this.currentSession.topic);
+          if (session) {
+            return true;
+          }
+        }
       }
 
-      // Check if session still exists
-      const session = walletConnectClient.session.get(this.currentSession.topic);
-      return !!session;
+      // If currentSession is lost, try to recover from WalletConnect client
+      if (this.dAppConnector) {
+        const walletConnectClient = (this.dAppConnector as any).walletConnectClient;
+        if (walletConnectClient?.session) {
+          // Get all active sessions
+          const allSessions = walletConnectClient.session.getAll();
+          if (allSessions && allSessions.length > 0) {
+            // Use the first active session
+            this.currentSession = allSessions[0];
+            console.log('[HederaService] Recovered WalletConnect session:', this.currentSession.topic);
+            return true;
+          }
+        }
+      }
+
+      return false;
     } catch (error) {
+      console.error('[HederaService] Error checking active session:', error);
       return false;
     }
   }
@@ -406,38 +423,89 @@ export class HederaService {
 
       console.log('[HederaService] Full address for signing:', fullAddress);
 
-      // Use DAppConnector signTransaction method (similar to signMessage pattern)
-      // Based on Hedera WalletConnect documentation, transactionBytes should be passed as Array
+      // Use DAppConnector signTransaction method
+      // WalletConnect expects base64 string or Transaction object, not array
       try {
         console.log('[HederaService] Preparing transaction for signing...');
         
-        // Convert Uint8Array to regular array for JSON serialization
-        // This is the format expected by WalletConnect protocol
-        const transactionBytesArray = Array.from(transactionBytes);
+        // Convert Uint8Array to base64 string (required by WalletConnect)
+        // Using buffer conversion for large arrays to avoid stack overflow
+        let base64String: string;
+        
+        if (transactionBytes.length < 10000) {
+          // For smaller arrays, use simple conversion
+          base64String = btoa(String.fromCharCode(...transactionBytes));
+        } else {
+          // For larger arrays, use chunking to avoid "Maximum call stack size exceeded"
+          let binary = '';
+          const chunkSize = 8192;
+          for (let i = 0; i < transactionBytes.length; i += chunkSize) {
+            const chunk = transactionBytes.slice(i, i + chunkSize);
+            binary += String.fromCharCode.apply(null, Array.from(chunk));
+          }
+          base64String = btoa(binary);
+        }
         
         console.log('[HederaService] Transaction bytes prepared:', {
           originalLength: transactionBytes.length,
-          arrayLength: transactionBytesArray.length,
-          firstBytes: transactionBytesArray.slice(0, 10),
-          sample: transactionBytesArray.slice(0, 20)
+          base64Length: base64String.length,
+          firstBytes: Array.from(transactionBytes.slice(0, 10))
         });
 
-        // Use DAppConnector signTransaction method (same pattern as signMessage)
+        // Use DAppConnector signTransaction method
         if (typeof this.dAppConnector.signTransaction !== 'function') {
           throw new Error('DAppConnector.signTransaction method not available');
         }
 
-        console.log('[HederaService] Calling DAppConnector.signTransaction with:', {
+        console.log('[HederaService] Calling DAppConnector.signTransaction with base64 format:', {
           signerAccountId: fullAddress,
-          transactionBytesLength: transactionBytesArray.length,
+          base64Length: base64String.length,
           network: this.currentNetwork
         });
         
-        // Call signTransaction with array format (standard for WalletConnect)
-        const signResult = await this.dAppConnector.signTransaction({
-          signerAccountId: fullAddress,
-          transactionBytes: transactionBytesArray,
-        });
+        // Call signTransaction with base64 string as transactionBody (required format)
+        // According to WalletConnect Hedera spec, transactionBody must be base64 string
+        let signResult: any;
+        let lastError: any;
+        
+        // Try transactionBody with base64 string (primary format)
+        try {
+          console.log('[HederaService] Attempting signTransaction with transactionBody (base64)...');
+          signResult = await this.dAppConnector.signTransaction({
+            signerAccountId: fullAddress,
+            transactionBody: base64String,
+          });
+          console.log('[HederaService] Success with transactionBody format');
+        } catch (error1: any) {
+          lastError = error1;
+          console.warn('[HederaService] transactionBody format failed:', error1.message);
+          
+          // Fallback: try with transactionBytes (base64 string)
+          try {
+            console.log('[HederaService] Attempting signTransaction with transactionBytes (base64)...');
+            signResult = await this.dAppConnector.signTransaction({
+              signerAccountId: fullAddress,
+              transactionBytes: base64String,
+            });
+            console.log('[HederaService] Success with transactionBytes (base64) format');
+          } catch (error2: any) {
+            lastError = error2;
+            console.warn('[HederaService] transactionBytes (base64) format failed:', error2.message);
+            
+            // Last fallback: try passing transactionBytes as array (some implementations)
+            try {
+              console.log('[HederaService] Attempting signTransaction with transactionBytes (array)...');
+              signResult = await this.dAppConnector.signTransaction({
+                signerAccountId: fullAddress,
+                transactionBytes: Array.from(transactionBytes),
+              });
+              console.log('[HederaService] Success with transactionBytes (array) format');
+            } catch (error3: any) {
+              lastError = error3;
+              throw new Error(`All signing formats failed. Last error: ${error3.message}. Ensure transaction is base64 encoded.`);
+            }
+          }
+        }
 
         console.log('[HederaService] Transaction signed successfully:', {
           hasResult: !!signResult,

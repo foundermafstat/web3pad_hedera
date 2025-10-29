@@ -4,6 +4,7 @@ import { SessionProvider } from 'next-auth/react';
 import { ThemeProvider } from 'next-themes';
 import { ReactNode, useEffect } from 'react';
 import { registerServiceWorker } from '@/lib/sw-register';
+import { WalletProvider } from '@/contexts/WalletContext';
 
 interface ProvidersProps {
 	children: ReactNode;
@@ -27,7 +28,9 @@ export function Providers({ children, session }: ProvidersProps) {
 				enableSystem={false}
 				disableTransitionOnChange
 			>
-				{children}
+				<WalletProvider>
+					{children}
+				</WalletProvider>
 			</ThemeProvider>
 		</SessionProvider>
 	);
