@@ -11,6 +11,19 @@ const nextConfig: NextConfig = {
 		// Allows production deployment even with TS errors
 		ignoreBuildErrors: true,
 	},
+	// Proxy API requests to backend server
+	async rewrites() {
+		return [
+			{
+				source: '/api/contracts/:path*',
+				destination: 'http://localhost:3001/api/contracts/:path*',
+			},
+			{
+				source: '/api/swap/:path*',
+				destination: 'http://localhost:3001/api/swap/:path*',
+			},
+		];
+	},
 	// Exclude Service Worker from being processed as a route
 	async headers() {
 		return [

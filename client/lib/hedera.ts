@@ -44,6 +44,12 @@ export class HederaService {
         return false;
       }
 
+      // Avoid re-initialization if already initialized
+      if (this.dAppConnector) {
+        console.log('[HederaService] DAppConnector already initialized, skipping re-init');
+        return true;
+      }
+
       if (!DAppConnector) {
         const hederaWcModule = await import('@hashgraph/hedera-wallet-connect');
         DAppConnector = hederaWcModule.DAppConnector;
@@ -312,6 +318,164 @@ export class HederaService {
    */
   getCurrentNetwork(): 'mainnet' | 'testnet' {
     return this.currentNetwork;
+  }
+
+  /**
+   * Check if there's an active WalletConnect session
+   */
+  hasActiveSession(): boolean {
+    if (!this.dAppConnector || !this.currentSession) {
+      return false;
+    }
+
+    try {
+      const walletConnectClient = (this.dAppConnector as any).walletConnectClient;
+      if (!walletConnectClient?.session) {
+        return false;
+      }
+
+      // Check if session still exists
+      const session = walletConnectClient.session.get(this.currentSession.topic);
+      return !!session;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Get current connected wallet address from active session
+   */
+  getCurrentWalletAddress(): string | null {
+    if (!this.hasActiveSession()) {
+      return null;
+    }
+
+    try {
+      const walletConnectClient = (this.dAppConnector as any).walletConnectClient;
+      if (!walletConnectClient?.session) {
+        return null;
+      }
+
+      const session = walletConnectClient.session.get(this.currentSession.topic);
+      if (!session) {
+        return null;
+      }
+
+      const accounts = session.namespaces?.hedera?.accounts || [];
+      if (accounts.length > 0) {
+        // Extract address from format hedera:network:0.0.12345
+        const accountId = accounts[0];
+        if (accountId.includes(':')) {
+          return accountId.split(':').slice(2).join(':');
+        }
+        return accountId;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error getting current wallet address:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Sign transaction using active WalletConnect session
+   */
+  async signTransaction(transactionBytes: Uint8Array, accountId: string): Promise<any> {
+    if (!this.hasActiveSession()) {
+      throw new Error('No active WalletConnect session. Please connect wallet first.');
+    }
+
+    if (!this.dAppConnector) {
+      throw new Error('DAppConnector not initialized');
+    }
+
+    try {
+      console.log('[HederaService] Signing transaction via WalletConnect:', {
+        accountId,
+        network: this.currentNetwork,
+        bytesLength: transactionBytes.length
+      });
+
+      // Check if address is already in full format
+      let fullAddress = accountId;
+      if (!accountId.startsWith('hedera:')) {
+        const networkPrefix = this.currentNetwork === 'mainnet' ? 'mainnet' : 'testnet';
+        fullAddress = `hedera:${networkPrefix}:${accountId}`;
+      }
+
+      console.log('[HederaService] Full address for signing:', fullAddress);
+
+      // Use DAppConnector signTransaction method (similar to signMessage pattern)
+      // Based on Hedera WalletConnect documentation, transactionBytes should be passed as Array
+      try {
+        console.log('[HederaService] Preparing transaction for signing...');
+        
+        // Convert Uint8Array to regular array for JSON serialization
+        // This is the format expected by WalletConnect protocol
+        const transactionBytesArray = Array.from(transactionBytes);
+        
+        console.log('[HederaService] Transaction bytes prepared:', {
+          originalLength: transactionBytes.length,
+          arrayLength: transactionBytesArray.length,
+          firstBytes: transactionBytesArray.slice(0, 10),
+          sample: transactionBytesArray.slice(0, 20)
+        });
+
+        // Use DAppConnector signTransaction method (same pattern as signMessage)
+        if (typeof this.dAppConnector.signTransaction !== 'function') {
+          throw new Error('DAppConnector.signTransaction method not available');
+        }
+
+        console.log('[HederaService] Calling DAppConnector.signTransaction with:', {
+          signerAccountId: fullAddress,
+          transactionBytesLength: transactionBytesArray.length,
+          network: this.currentNetwork
+        });
+        
+        // Call signTransaction with array format (standard for WalletConnect)
+        const signResult = await this.dAppConnector.signTransaction({
+          signerAccountId: fullAddress,
+          transactionBytes: transactionBytesArray,
+        });
+
+        console.log('[HederaService] Transaction signed successfully:', {
+          hasResult: !!signResult,
+          resultKeys: signResult ? Object.keys(signResult) : [],
+          hasSignature: !!(signResult?.result?.signatureMap || signResult?.signatureMap || signResult?.signature),
+          hasTransactionId: !!(signResult?.result?.transactionId || signResult?.transactionId)
+        });
+
+        return {
+          signature: signResult?.result?.signatureMap || signResult?.signatureMap || signResult?.signature || '',
+          accountId: accountId,
+          transactionId: signResult?.result?.transactionId || signResult?.transactionId || '',
+          walletType: 'walletconnect',
+          network: this.currentNetwork
+        };
+      } catch (error: any) {
+        console.error('[HederaService] Transaction signing failed:', error);
+        console.error('[HederaService] Error details:', {
+          message: error?.message,
+          name: error?.name,
+          stack: error?.stack?.substring(0, 200)
+        });
+        
+        // Provide more helpful error message
+        if (error?.message?.includes('timeout') || error?.message?.includes('expired')) {
+          throw new Error('Запрос на подпись транзакции истек. Пожалуйста, попробуйте снова.');
+        } else if (error?.message?.includes('rejected') || error?.message?.includes('denied')) {
+          throw new Error('Подпись транзакции была отклонена пользователем.');
+        } else if (error?.message?.includes('not connected') || error?.message?.includes('session')) {
+          throw new Error('Кошелек не подключен. Пожалуйста, переподключите кошелек.');
+        }
+        
+        throw error;
+      }
+    } catch (error: any) {
+      console.error('[HederaService] Error signing transaction via WalletConnect:', error);
+      throw new Error(`Failed to sign transaction via WalletConnect: ${error.message || error.toString()}`);
+    }
   }
 }
 

@@ -11,6 +11,8 @@ import profileRoutes from './routes/profile.js';
 import gameSessionRoutes from './routes/game-sessions.js';
 import walletRoutes from './routes/wallet.js';
 import gamesRoutes from './routes/games.js';
+import contractRoutes from './routes/contracts-simple.js';
+import swapRoutes from './routes/swap.js';
 import prisma from './lib/prisma.js';
 import { socketAuthMiddleware } from './middleware/auth.js';
 
@@ -71,6 +73,10 @@ app.use('/api', gameSessionRoutes);
 
 // Games routes
 app.use('/api/games', gamesRoutes);
+
+// Contract routes
+app.use('/api/contracts', contractRoutes);
+app.use('/api/swap', swapRoutes);
 
 // Blockchain routes
 

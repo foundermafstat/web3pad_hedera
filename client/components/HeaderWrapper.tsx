@@ -17,7 +17,7 @@ function HeaderWrapper() {
 		<header className="fixed top-0 z-50 w-full bg-gradient-to-b from-background/50 to-transparent">
 			<div className="relative h-10 md:h-16 flex items-center px-4">
 				{/* Logo */}
-				<FaLink
+				<Link
 					href="/"
 					className="flex items-center hover:opacity-80 transition-opacity"
 				>

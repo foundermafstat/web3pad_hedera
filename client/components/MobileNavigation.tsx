@@ -24,7 +24,8 @@ import {
 	FaChartBar,
 	FaChevronRight,
 	FaTimes,
-	FaCubes
+	FaCubes,
+	FaExchangeAlt
 } from 'react-icons/fa';
 
 interface NavigationItem {
@@ -122,6 +123,12 @@ const navigationSections: NavigationSection[] = [
 				href: '/players',
 				icon: FaUsers,
 				description: 'Browse community members'
+			},
+			{
+				title: 'Token Swap',
+				href: '/swap',
+				icon: FaExchangeAlt,
+				description: 'Exchange HBAR for HPLAY tokens'
 			},
 		]
 	}

@@ -28,7 +28,8 @@ import {
 	FaStar,
 	FaPlay,
 	FaLayerGroup,
-	FaFileAlt
+	FaFileAlt,
+	FaExchangeAlt
 } from 'react-icons/fa';
 import { ThemeLogo } from './ThemeLogo';
 
@@ -225,6 +226,22 @@ export function DesktopNavigation() {
 											</div>
 											<div className="text-muted-foreground text-sm">
 												Manage blockchain contracts
+											</div>
+										</div>
+									</Link>
+								</NavigationMenuLink>
+							</li>
+							<li>
+								<NavigationMenuLink asChild>
+									<Link href="/swap" className="flex gap-2 rounded-md hover:bg-accent">
+										
+										<div>
+											<div className="flex">
+												<FaExchangeAlt className="w-5 h-5 text-primary mr-2" />
+												<div className="font-medium">Token Swap</div>
+											</div>
+											<div className="text-muted-foreground text-sm">
+												Exchange HBAR for HPLAY tokens
 											</div>
 										</div>
 									</Link>

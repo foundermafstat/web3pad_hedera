@@ -229,6 +229,7 @@ router.post('/oauth', async (req, res) => {
 });
 
 // Authentication via Blockchain (Leather wallet)
+// This endpoint handles wallet connection and authentication as a single login flow
 router.post('/leather', async (req, res) => {
   try {
     const { walletAddress, signature, message } = req.body;
@@ -242,6 +243,8 @@ router.post('/leather', async (req, res) => {
 
     // TODO: Signature verification
 
+    console.log(`[Leather Auth] 🚀 Wallet login initiated for ${walletAddress}`);
+
     // Find user by wallet address
     let user = await prisma.user.findFirst({
       where: {
@@ -253,8 +256,10 @@ router.post('/leather', async (req, res) => {
       }
     });
 
+    const isNewUser = !user;
+
     if (!user) {
-      // Create new user
+      // Create new user with wallet connection
       const username = `user_${walletAddress.substring(0, 8)}`;
       const displayName = `User ${walletAddress.substring(0, 8)}`;
 
@@ -262,6 +267,7 @@ router.post('/leather', async (req, res) => {
         data: {
           username,
           displayName,
+          blockchainConnected: true, // Mark as connected via wallet
           wallets: {
             create: {
               address: walletAddress,
@@ -271,25 +277,49 @@ router.post('/leather', async (req, res) => {
           }
         }
       });
+
+      console.log(`[Leather Auth] ✅ New user created and logged in via wallet: ${username}`);
+    } else {
+      // Update user to mark wallet login
+      user = await prisma.user.update({
+        where: {
+          id: user.id
+        },
+        data: {
+          blockchainConnected: true, // Ensure flag is set for wallet login
+          updatedAt: new Date() // Update timestamp to track last login
+        }
+      });
+
+      console.log(`[Leather Auth] ✅ User logged in via wallet connection: ${user.username}`);
     }
 
     // Don't include password in response
     const { password: _, ...userWithoutPassword } = user;
+
+    console.log('[Leather Auth] 📊 Login completed via wallet:', {
+      isNewUser,
+      userId: userWithoutPassword.id,
+      username: userWithoutPassword.username,
+      blockchainConnected: userWithoutPassword.blockchainConnected,
+      walletAddress
+    });
 
     res.json({
       success: true,
       data: userWithoutPassword
     });
   } catch (error) {
-    console.error('Leather authentication error:', error);
+    console.error('[Leather Auth] ❌ Wallet authentication error:', error);
     res.status(500).json({
       success: false,
-      error: 'Server error during Leather authentication'
+      error: 'Server error during Leather wallet authentication'
     });
   }
 });
 
 // Authentication via Hedera wallet
+// This endpoint handles wallet connection and authentication as a single login flow
 router.post('/hedera', async (req, res) => {
   try {
     const { walletAddress, signature, message, network } = req.body;
@@ -318,7 +348,7 @@ router.post('/hedera', async (req, res) => {
     }
 
     // TODO: Signature verification for Hedera
-    console.log(`[Hedera Auth] Verifying signature for ${cleanAddress} on network ${network}`);
+    console.log(`[Hedera Auth] 🚀 Wallet login initiated for ${cleanAddress} on network ${network}`);
     console.log(`[Hedera Auth] Message: ${message}`);
     console.log(`[Hedera Auth] Signature: ${signature.substring(0, 20)}...`);
 
@@ -337,8 +367,10 @@ router.post('/hedera', async (req, res) => {
       }
     });
 
+    const isNewUser = !user;
+
     if (!user) {
-      // Create new user
+      // Create new user with wallet connection
       const username = `hedera_${cleanAddress.replace(/\./g, '_')}`;
       const displayName = `Hedera ${cleanAddress.split('.').pop()}`;
 
@@ -346,6 +378,7 @@ router.post('/hedera', async (req, res) => {
         data: {
           username,
           displayName,
+          blockchainConnected: true, // Mark as connected via wallet
           wallets: {
             create: {
               address: cleanAddress,
@@ -360,8 +393,10 @@ router.post('/hedera', async (req, res) => {
         }
       });
 
-      console.log(`[Hedera Auth] New user created: ${username}`);
+      console.log(`[Hedera Auth] ✅ New user created and logged in via wallet: ${username}`);
     } else {
+      // Existing user - update blockchainConnected flag and wallet info
+      
       // Check if user has this wallet address
       const existingWallet = await prisma.wallet.findFirst({
         where: {
@@ -385,17 +420,35 @@ router.post('/hedera', async (req, res) => {
         console.log(`[Hedera Auth] Wallet network updated: ${network}`);
       }
 
-      console.log(`[Hedera Auth] User found: ${user.username}`);
+      // Update user to mark wallet login
+      user = await prisma.user.update({
+        where: {
+          id: user.id
+        },
+        data: {
+          blockchainConnected: true, // Ensure flag is set for wallet login
+          updatedAt: new Date() // Update timestamp to track last login
+        },
+        include: {
+          wallets: true
+        }
+      });
+
+      console.log(`[Hedera Auth] ✅ User logged in via wallet connection: ${user.username}`);
     }
 
     // Don't include password in response
     const { password: _, ...userWithoutPassword } = user;
     
-    console.log('[Hedera Auth] Sending user data:', {
-      id: userWithoutPassword.id,
+    console.log('[Hedera Auth] 📊 Login completed via wallet:', {
+      isNewUser,
+      userId: userWithoutPassword.id,
       username: userWithoutPassword.username,
       displayName: userWithoutPassword.displayName,
-      email: userWithoutPassword.email
+      email: userWithoutPassword.email,
+      blockchainConnected: userWithoutPassword.blockchainConnected,
+      walletAddress: cleanAddress,
+      network
     });
 
     res.json({
@@ -403,15 +456,17 @@ router.post('/hedera', async (req, res) => {
       data: userWithoutPassword
     });
   } catch (error) {
-    console.error('Hedera authentication error:', error);
+    console.error('[Hedera Auth] ❌ Wallet authentication error:', error);
     res.status(500).json({
       success: false,
-      error: 'Server error during Hedera authentication'
+      error: 'Server error during Hedera wallet authentication'
     });
   }
 });
 
 // Login or register via wallet
+// This is a simplified endpoint for wallet login (used internally)
+// Main wallet authentication should go through /hedera or /leather endpoints
 router.post('/wallet-login', async (req, res) => {
   try {
     const { walletAddress, walletType, network } = req.body;
@@ -422,6 +477,8 @@ router.post('/wallet-login', async (req, res) => {
         error: 'Wallet address or wallet type not specified'
       });
     }
+
+    console.log(`[Wallet Login] 🚀 Wallet login initiated for ${walletAddress} (${walletType})`);
 
     // Find user by wallet address
     let user = await prisma.user.findFirst({
@@ -437,6 +494,8 @@ router.post('/wallet-login', async (req, res) => {
         wallets: true
       }
     });
+
+    const isNewUser = !user;
 
     if (!user) {
       // Create new user
@@ -470,6 +529,7 @@ router.post('/wallet-login', async (req, res) => {
         data: {
           username: finalUsername,
           displayName,
+          blockchainConnected: true, // Mark as connected via wallet
           wallets: {
             create: {
               address: walletAddress,
@@ -483,6 +543,8 @@ router.post('/wallet-login', async (req, res) => {
           wallets: true
         }
       });
+
+      console.log(`[Wallet Login] ✅ New user created and logged in via wallet: ${finalUsername}`);
     } else {
       // Check if user has this wallet address
       const existingWallet = user.wallets.find(
@@ -511,14 +573,40 @@ router.post('/wallet-login', async (req, res) => {
           }
         });
       }
+
+      // Update user to mark wallet login
+      user = await prisma.user.update({
+        where: {
+          id: user.id
+        },
+        data: {
+          blockchainConnected: true, // Ensure flag is set for wallet login
+          updatedAt: new Date() // Update timestamp to track last login
+        },
+        include: {
+          wallets: true
+        }
+      });
+
+      console.log(`[Wallet Login] ✅ User logged in via wallet connection: ${user.username}`);
     }
 
     // Don't include password in response
     const { password: _, ...userWithoutPassword } = user;
 
+    console.log('[Wallet Login] 📊 Login completed via wallet:', {
+      isNewUser,
+      userId: userWithoutPassword.id,
+      username: userWithoutPassword.username,
+      blockchainConnected: userWithoutPassword.blockchainConnected,
+      walletAddress,
+      walletType,
+      network
+    });
+
     res.json(userWithoutPassword);
   } catch (error) {
-    console.error('Wallet login error:', error);
+    console.error('[Wallet Login] ❌ Wallet login error:', error);
     res.status(500).json({
       success: false,
       error: 'Server error during wallet login'

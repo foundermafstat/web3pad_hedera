@@ -1,4 +1,5 @@
 import { BlockchainWalletAuth } from '@/components/auth/BlockchainWalletAuth';
+import { HederaWalletAuth } from '@/components/auth/HederaWalletAuth';
 import { SignInForm } from '@/components/SignInForm';
 import { SignUpForm } from '@/components/SignUpForm';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,14 +24,33 @@ export default async function SignInPage() {
 					</p>
 				</div>
 
-				<Tabs defaultValue="wallet" className="w-full">
-					<TabsList className="grid w-full grid-cols-2">
-						<TabsTrigger value="wallet">Wallet</TabsTrigger>
+				<Tabs defaultValue="hedera" className="w-full">
+					<TabsList className="grid w-full grid-cols-3">
+						<TabsTrigger value="hedera">Hedera</TabsTrigger>
+						<TabsTrigger value="wallet">Bitcoin</TabsTrigger>
 						<TabsTrigger value="account">Account</TabsTrigger>
 					</TabsList>
 					
+					<TabsContent value="hedera" className="space-y-4">
+						<Card>
+							<CardHeader>
+								<CardTitle>Hedera Wallet</CardTitle>
+							</CardHeader>
+							<CardContent>
+								<HederaWalletAuth />
+							</CardContent>
+						</Card>
+					</TabsContent>
+					
 					<TabsContent value="wallet" className="space-y-4">
-						<BlockchainWalletAuth />
+						<Card>
+							<CardHeader>
+								<CardTitle>Bitcoin Wallet</CardTitle>
+							</CardHeader>
+							<CardContent>
+								<BlockchainWalletAuth />
+							</CardContent>
+						</Card>
 					</TabsContent>
 					
 					<TabsContent value="account" className="space-y-4">
