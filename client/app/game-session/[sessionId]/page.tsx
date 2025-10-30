@@ -30,7 +30,7 @@ export default async function GameSessionPage({ params }: GameSessionPageProps) 
 	}
 
 	return (
-		<div className="min-h-screen bg-background">
+		<div className="min-h-screen bg-background pt-10 md:pt-16">
 			<GameSessionView session={sessionData} />
 		</div>
 	);

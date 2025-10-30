@@ -1,5 +1,6 @@
 import { ContractCallQuery, ContractFunctionParameters, AccountBalanceQuery, AccountId, Hbar } from '@hashgraph/sdk';
-import { initializeHederaClient, getContractConfig } from './hedera-config.js';
+import { initializeHederaClient, getContractConfig, getContractEvmAddress, HEDERA_USE_MOCKS, HEDERA_CONFIG } from './hedera-config.js';
+import { ethers } from 'ethers';
 import { transactionService } from './transaction-service.js';
 
 /**
@@ -8,6 +9,14 @@ import { transactionService } from './transaction-service.js';
 export class ContractService {
     constructor() {
         this.client = initializeHederaClient();
+    }
+
+    getEthersContract(contractName) {
+        const rpcUrl = HEDERA_CONFIG.jsonRpcUrl;
+        const provider = new ethers.JsonRpcProvider(rpcUrl);
+        const evmAddress = getContractEvmAddress(contractName);
+        const abi = getContractConfig(contractName).abi;
+        return new ethers.Contract(evmAddress, abi, provider);
     }
 
     /**
@@ -25,7 +34,10 @@ export class ContractService {
 
             // Check if client has operator set
             if (!this.client.operatorAccountId) {
-                return this.getMockContractResult(contractName, functionName);
+                if (HEDERA_USE_MOCKS) {
+                    return this.getMockContractResult(contractName, functionName);
+                }
+                throw new Error('Hedera operator not configured (set HEDERA_ACCOUNT_ID and HEDERA_PRIVATE_KEY)');
             }
 
             const contractConfig = getContractConfig(contractName);
@@ -35,7 +47,8 @@ export class ContractService {
             const query = new ContractCallQuery()
                 .setContractId(contractId)
                 .setFunction(functionName)
-                .setMaxQueryPayment(Hbar.fromTinybars(100000000)); // 1 HBAR max payment
+                .setGas(500000) // sufficient gas for view calls
+                .setMaxQueryPayment(Hbar.fromTinybars(200000000)); // 2 HBAR max payment
 
             // Add parameters if provided
             if (parameters.length > 0) {
@@ -47,8 +60,10 @@ export class ContractService {
             
             return result;
         } catch (error) {
-            // Fallback to mock data if contract call fails
-            return this.getMockContractResult(contractName, functionName);
+            if (HEDERA_USE_MOCKS) {
+                return this.getMockContractResult(contractName, functionName);
+            }
+            throw error;
         }
     }
 
@@ -378,6 +393,140 @@ export class ContractService {
     async getTotalParticipants() {
         const result = await this.callContractFunction('LotteryPool', 'getTotalParticipants');
         return result.getUint256(0).toNumber();
+    }
+
+    /**
+     * Get last draw timestamp
+     * @returns {Promise<number>} Unix timestamp (seconds)
+     */
+    async getLastDrawTimestamp() {
+        const result = await this.callContractFunction('LotteryPool', 'getLastDrawTimestamp');
+        return result.getUint256(0).toNumber();
+    }
+
+    /**
+     * Get draw interval in seconds
+     * @returns {Promise<number>} Interval seconds
+     */
+    async getDrawInterval() {
+        const result = await this.callContractFunction('LotteryPool', 'getDrawInterval');
+        return result.getUint256(0).toNumber();
+    }
+
+    /**
+     * Check if address is a participant
+     * @param {string} userAddress Address
+     * @returns {Promise<boolean>} is participant
+     */
+    async isLotteryParticipant(userAddress) {
+        const result = await this.callContractFunction('LotteryPool', 'isParticipant', [
+            new ContractFunctionParameters().addAddress(this.validateAddress(userAddress))
+        ]);
+        return result.getBool(0);
+    }
+
+    /**
+     * Get participant transaction count
+     * @param {string} userAddress Address
+     * @returns {Promise<number>} count
+     */
+    async getParticipantTransactionCount(userAddress) {
+        const result = await this.callContractFunction('LotteryPool', 'getParticipantTransactionCount', [
+            new ContractFunctionParameters().addAddress(this.validateAddress(userAddress))
+        ]);
+        return result.getUint256(0).toNumber();
+    }
+
+    /**
+     * Get participant volume
+     * @param {string} userAddress Address
+     * @returns {Promise<number>} volume
+     */
+    async getParticipantVolume(userAddress) {
+        const result = await this.callContractFunction('LotteryPool', 'getParticipantVolume', [
+            new ContractFunctionParameters().addAddress(this.validateAddress(userAddress))
+        ]);
+        return result.getUint256(0).toNumber();
+    }
+
+    /**
+     * Get all participants (array of addresses)
+     * @returns {Promise<string[]>} addresses
+     */
+    async getAllParticipants() {
+        try {
+            const contract = this.getEthersContract('LotteryPool');
+            const participants = await contract.getAllParticipants();
+            // Normalize to checksum addresses as strings
+            return (participants || []).map((a) => {
+                try { return ethers.getAddress(String(a)); } catch { return String(a); }
+            });
+        } catch (error) {
+            console.error('Error fetching all participants via JSON-RPC:', error);
+            if (HEDERA_USE_MOCKS) {
+                return [];
+            }
+            throw error;
+        }
+    }
+
+    /** FaucetManager via JSON-RPC **/
+    async getSwapRateRpc() {
+        const contract = this.getEthersContract('FaucetManager');
+        const r = await contract.getSwapRate();
+        // tuple(uint256,uint256,uint256,uint256,bool)
+        return {
+            hbarToHplayRate: Number(r[0]),
+            bonusMultiplierMin: Number(r[1]),
+            bonusMultiplierMax: Number(r[2]),
+            dailyLimitHbar: Number(r[3]),
+            faucetEnabled: Boolean(r[4])
+        };
+    }
+
+    async getUserSwapInfoRpc(userAddress) {
+        const contract = this.getEthersContract('FaucetManager');
+        const addr = this.validateAddress(userAddress);
+        const r = await contract.getUserSwapInfo(addr);
+        // tuple(uint256 totalSwappedToday, uint256 lastSwapTimestamp, uint256 swapsCount)
+        return {
+            dailyUsedHbar: Number(r[0]),
+            lastSwapTimestamp: Number(r[1]),
+            totalSwaps: Number(r[2])
+        };
+    }
+
+    async calculateBonusFactorRpc(userAddress) {
+        const contract = this.getEthersContract('FaucetManager');
+        const addr = this.validateAddress(userAddress);
+        const v = await contract.calculateBonusFactor(addr);
+        return Number(v);
+    }
+
+    async isNewDayRpc(lastSwapTimestamp) {
+        // Compute via fallback: consider new day if 24h passed since lastSwapTimestamp
+        const nowSec = Math.floor(Date.now() / 1000);
+        const last = Number(lastSwapTimestamp) || 0;
+        return nowSec - last >= 24 * 60 * 60;
+    }
+
+    async getRemainingDailyLimitRpc(userAddress) {
+        const contract = this.getEthersContract('FaucetManager');
+        const addr = this.validateAddress(userAddress);
+        const v = await contract.getRemainingDailyLimit(addr);
+        return Number(v);
+    }
+
+    async getFaucetStatsRpc() {
+        const contract = this.getEthersContract('FaucetManager');
+        const r = await contract.getFaucetStats();
+        // assume (uint256 totalDistributed, uint256 totalUsers, uint256 totalSwaps, uint256 totalHbar)
+        return {
+            totalDistributed: Number(r[0] || 0),
+            totalUsers: Number(r[1] || 0),
+            totalSwaps: Number(r[2] || 0),
+            totalHbar: Number(r[3] || 0)
+        };
     }
 
     /**

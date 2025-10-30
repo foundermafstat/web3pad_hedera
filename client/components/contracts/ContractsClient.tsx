@@ -35,6 +35,44 @@ export function ContractsClient({
 	const [coreContracts, setCoreContracts] = useState<CoreContract[]>(
 		initialContracts || []
 	);
+	const [systemStats, setSystemStats] = useState<null | {
+		gamesPlayed: number;
+		players: number;
+		rewardsDistributed: number;
+		poolBalance: number;
+		totalParticipants: number;
+		initialized: boolean;
+	}>(null);
+	const [lotteryInfo, setLotteryInfo] = useState<null | {
+		poolBalance: number;
+		totalParticipants: number;
+		lastDrawTimestamp: number;
+		drawInterval: number;
+		timeUntilNextDraw: number;
+		isParticipant?: boolean;
+		participantTxCount?: number;
+		participantVolume?: number;
+		participants?: string[];
+	}>(null);
+	const [faucetInfo, setFaucetInfo] = useState<null | {
+		hbarToHplayRate: number;
+		bonusMultiplierMin: number;
+		bonusMultiplierMax: number;
+		dailyLimitHbar: number;
+		faucetEnabled: boolean;
+		totalDistributed?: number;
+		totalUsers?: number;
+		totalSwaps?: number;
+		totalHbar?: number;
+		user?: {
+			dailyUsedHbar: number;
+			lastSwapTimestamp: number;
+			totalSwaps: number;
+			bonusFactor?: number;
+			isNewDay?: boolean;
+			remainingDaily?: number;
+		};
+	}>(null);
 	const [networkInfo, setNetworkInfo] = useState({
 		network: initialBlockchainStatus?.network || 'Testnet',
 		deployedContracts: initialContracts.length,
@@ -72,6 +110,194 @@ export function ContractsClient({
 		};
 		refresh();
 	}, []);
+
+	// Fetch HederaGameLaunchpad system stats when its tab becomes active
+	useEffect(() => {
+		const fetchStats = async () => {
+			try {
+				const base =
+					process.env.NEXT_PUBLIC_SERVER_BASE_URL || 'http://localhost:3001';
+				const res = await fetch(`${base}/api/contracts/system/stats`, {
+					cache: 'no-store',
+				});
+				const json = await res.json();
+				if (json?.success && json?.data) {
+					setSystemStats(json.data);
+				}
+			} catch (_) {
+				// ignore
+			}
+		};
+
+		if (activeTab === 'HederaGameLaunchpad') {
+			fetchStats();
+		}
+	}, [activeTab]);
+
+	// Fetch FaucetManager info when its tab becomes active
+	useEffect(() => {
+		const fetchFaucet = async () => {
+			try {
+				const base =
+					process.env.NEXT_PUBLIC_SERVER_BASE_URL || 'http://localhost:3001';
+				const [rateRes, statsRes] = await Promise.all([
+					fetch(`${base}/api/contracts/faucet/rpc/swap-rate`, {
+						cache: 'no-store',
+					}),
+					fetch(`${base}/api/contracts/faucet/rpc/stats`, {
+						cache: 'no-store',
+					}),
+				]);
+				const [rateJson, statsJson] = await Promise.all([
+					rateRes.json(),
+					statsRes.json(),
+				]);
+				const addr = getPlayerAddress();
+				let userBlock: any = undefined;
+				if (addr) {
+					const [userRes, bonusRes, remainRes] = await Promise.all([
+						fetch(`${base}/api/contracts/faucet/rpc/user/${addr}`, {
+							cache: 'no-store',
+						}),
+						fetch(`${base}/api/contracts/faucet/rpc/bonus-factor/${addr}`, {
+							cache: 'no-store',
+						}),
+						fetch(`${base}/api/contracts/faucet/rpc/remaining-daily/${addr}`, {
+							cache: 'no-store',
+						}),
+					]);
+					const [userJson, bonusJson, remainJson] = await Promise.all([
+						userRes.json(),
+						bonusRes.json(),
+						remainRes.json(),
+					]);
+					const isNewDay = await fetch(
+						`${base}/api/contracts/faucet/rpc/is-new-day/${
+							userJson?.data?.lastSwapTimestamp || 0
+						}`,
+						{ cache: 'no-store' }
+					)
+						.then((r) => r.json())
+						.catch(() => null);
+					userBlock = {
+						...(userJson?.data || {}),
+						bonusFactor: bonusJson?.data?.bonusFactor ?? undefined,
+						remainingDaily: remainJson?.data?.remaining ?? undefined,
+						isNewDay: isNewDay?.data?.isNewDay ?? undefined,
+					};
+				}
+
+				setFaucetInfo({
+					...(rateJson?.data || {}),
+					...(statsJson?.data || {}),
+					user: userBlock,
+				});
+			} catch (_) {}
+		};
+
+		if (activeTab === 'FaucetManager') {
+			fetchFaucet();
+		}
+	}, [activeTab]);
+
+	// Fetch LotteryPool info when its tab becomes active
+	useEffect(() => {
+		const fetchLottery = async () => {
+			try {
+				const base =
+					process.env.NEXT_PUBLIC_SERVER_BASE_URL || 'http://localhost:3001';
+				const [
+					poolRes,
+					partsRes,
+					lastDrawRes,
+					intervalRes,
+					nextDrawRes,
+					allPartsRes,
+				] = await Promise.all([
+					fetch(`${base}/api/contracts/lottery/pool-balance`, {
+						cache: 'no-store',
+					}),
+					fetch(`${base}/api/contracts/lottery/participants`, {
+						cache: 'no-store',
+					}),
+					fetch(`${base}/api/contracts/lottery/last-draw`, {
+						cache: 'no-store',
+					}),
+					fetch(`${base}/api/contracts/lottery/draw-interval`, {
+						cache: 'no-store',
+					}),
+					fetch(`${base}/api/contracts/lottery/next-draw`, {
+						cache: 'no-store',
+					}),
+					fetch(`${base}/api/contracts/lottery/participants/all`, {
+						cache: 'no-store',
+					}),
+				]);
+				const [
+					poolJson,
+					partsJson,
+					lastDrawJson,
+					intervalJson,
+					nextDrawJson,
+					allPartsJson,
+				] = await Promise.all([
+					poolRes.json(),
+					partsRes.json(),
+					lastDrawRes.json(),
+					intervalRes.json(),
+					nextDrawRes.json(),
+					allPartsRes.json(),
+				]);
+
+				const baseInfo = {
+					poolBalance: poolJson?.data?.poolBalance ?? 0,
+					totalParticipants: partsJson?.data?.participants ?? 0,
+					lastDrawTimestamp: lastDrawJson?.data?.lastDrawTimestamp ?? 0,
+					drawInterval: intervalJson?.data?.drawInterval ?? 0,
+					timeUntilNextDraw: nextDrawJson?.data?.timeUntilNextDraw ?? 0,
+					participants: Array.isArray(allPartsJson?.data?.participants)
+						? allPartsJson.data.participants
+						: [],
+				};
+
+				// Optional per-user info
+				const addr = getPlayerAddress();
+				if (addr) {
+					const [isPartRes, txCountRes, volumeRes] = await Promise.all([
+						fetch(`${base}/api/contracts/lottery/is-participant/${addr}`, {
+							cache: 'no-store',
+						}),
+						fetch(
+							`${base}/api/contracts/lottery/participant/${addr}/tx-count`,
+							{ cache: 'no-store' }
+						),
+						fetch(`${base}/api/contracts/lottery/participant/${addr}/volume`, {
+							cache: 'no-store',
+						}),
+					]);
+					const [isPartJson, txCountJson, volumeJson] = await Promise.all([
+						isPartRes.json(),
+						txCountRes.json(),
+						volumeRes.json(),
+					]);
+					setLotteryInfo({
+						...baseInfo,
+						isParticipant: !!isPartJson?.data?.isParticipant,
+						participantTxCount: txCountJson?.data?.count ?? 0,
+						participantVolume: volumeJson?.data?.volume ?? 0,
+					});
+				} else {
+					setLotteryInfo(baseInfo);
+				}
+			} catch (_) {
+				// ignore
+			}
+		};
+
+		if (activeTab === 'LotteryPool') {
+			fetchLottery();
+		}
+	}, [activeTab]);
 
 	const handleContractSelect = (contract: CoreContract) => {
 		setSelectedContract(contract);
@@ -114,6 +340,163 @@ export function ContractsClient({
 										className={`ml-4 px-3 py-1 rounded-full text-xs font-medium border ${'bg-green-500/10 text-green-500 border-green-500/20'}`}
 									>
 										{'Blockchain Connected'}
+									</div>
+								)}
+
+								{/* FaucetManager specific data shown in FaucetManager contract tab */}
+								{activeTab === 'FaucetManager' && (
+									<div className="mt-6">
+										<h3 className="text-lg font-semibold text-foreground mb-3">
+											Faucet statistics
+										</h3>
+										<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+											<div className="bg-card border border-border rounded-md p-4">
+												<div className="text-2xl font-bold text-primary">
+													{faucetInfo?.hbarToHplayRate ?? '—'}
+												</div>
+												<div className="text-xs text-muted-foreground">
+													HBAR-&gt;HPLAY rate
+												</div>
+											</div>
+											<div className="bg-card border border-border rounded-md p-4">
+												<div className="text-2xl font-bold text-primary">
+													{faucetInfo?.bonusMultiplierMin ?? '—'}
+												</div>
+												<div className="text-xs text-muted-foreground">
+													Bonus min (x100)
+												</div>
+											</div>
+											<div className="bg-card border border-border rounded-md p-4">
+												<div className="text-2xl font-bold text-primary">
+													{faucetInfo?.bonusMultiplierMax ?? '—'}
+												</div>
+												<div className="text-xs text-muted-foreground">
+													Bonus max (x100)
+												</div>
+											</div>
+											<div className="bg-card border border-border rounded-md p-4">
+												<div className="text-2xl font-bold text-primary">
+													{faucetInfo?.dailyLimitHbar ?? '—'}
+												</div>
+												<div className="text-xs text-muted-foreground">
+													Daily limit (tinyHBAR)
+												</div>
+											</div>
+											<div className="bg-card border border-border rounded-md p-4">
+												<div
+													className={`text-2xl font-bold ${
+														faucetInfo?.faucetEnabled
+															? 'text-primary'
+															: 'text-destructive'
+													}`}
+												>
+													{faucetInfo?.faucetEnabled ? 'Enabled' : 'Disabled'}
+												</div>
+												<div className="text-xs text-muted-foreground">
+													Faucet state
+												</div>
+											</div>
+											<div className="bg-card border border-border rounded-md p-4">
+												<div className="text-2xl font-bold text-primary">
+													{faucetInfo?.totalDistributed ?? '—'}
+												</div>
+												<div className="text-xs text-muted-foreground">
+													Total distributed (HPLAY)
+												</div>
+											</div>
+											<div className="bg-card border border-border rounded-md p-4">
+												<div className="text-2xl font-bold text-primary">
+													{faucetInfo?.totalUsers ?? '—'}
+												</div>
+												<div className="text-xs text-muted-foreground">
+													Total users
+												</div>
+											</div>
+											<div className="bg-card border border-border rounded-md p-4">
+												<div className="text-2xl font-bold text-primary">
+													{faucetInfo?.totalSwaps ?? '—'}
+												</div>
+												<div className="text-xs text-muted-foreground">
+													Total swaps
+												</div>
+											</div>
+											<div className="bg-card border border-border rounded-md p-4">
+												<div className="text-2xl font-bold text-primary">
+													{faucetInfo?.totalHbar ?? '—'}
+												</div>
+												<div className="text-xs text-muted-foreground">
+													Total HBAR received (tinyHBAR)
+												</div>
+											</div>
+											{faucetInfo?.user && (
+												<>
+													<div className="bg-card border border-border rounded-md p-4">
+														<div className="text-2xl font-bold text-primary">
+															{faucetInfo.user.dailyUsedHbar}
+														</div>
+														<div className="text-xs text-muted-foreground">
+															Your daily used (tinyHBAR)
+														</div>
+													</div>
+													<div className="bg-card border border-border rounded-md p-4">
+														<div className="text-2xl font-bold text-primary">
+															{faucetInfo.user.lastSwapTimestamp}
+														</div>
+														<div className="text-xs text-muted-foreground">
+															Your last swap (unix)
+														</div>
+													</div>
+													<div className="bg-card border border-border rounded-md p-4">
+														<div className="text-2xl font-bold text-primary">
+															{faucetInfo.user.totalSwaps}
+														</div>
+														<div className="text-xs text-muted-foreground">
+															Your swaps
+														</div>
+													</div>
+													{typeof faucetInfo.user.bonusFactor !==
+														'undefined' && (
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-2xl font-bold text-primary">
+																{faucetInfo.user.bonusFactor}
+															</div>
+															<div className="text-xs text-muted-foreground">
+																Your bonus factor (x100)
+															</div>
+														</div>
+													)}
+													{typeof faucetInfo.user.remainingDaily !==
+														'undefined' && (
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-2xl font-bold text-primary">
+																{faucetInfo.user.remainingDaily}
+															</div>
+															<div className="text-xs text-muted-foreground">
+																Your remaining daily (tinyHBAR)
+															</div>
+														</div>
+													)}
+													{typeof faucetInfo.user.isNewDay !== 'undefined' && (
+														<div className="bg-card border border-border rounded-md p-4">
+															<div
+																className={`text-2xl font-bold ${
+																	faucetInfo.user.isNewDay
+																		? 'text-primary'
+																		: 'text-muted-foreground'
+																}`}
+															>
+																{faucetInfo.user.isNewDay
+																	? 'New day'
+																	: 'Same day'}
+															</div>
+															<div className="text-xs text-muted-foreground">
+																Day status
+															</div>
+														</div>
+													)}
+												</>
+											)}
+										</div>
 									</div>
 								)}
 							</div>
@@ -331,6 +714,196 @@ export function ContractsClient({
 												</div>
 											</div>
 										))}
+
+									{/* HederaGameLaunchpad specific data */}
+									{activeTab === 'HederaGameLaunchpad' && (
+										<div className="mt-6">
+											<h3 className="text-lg font-semibold text-foreground mb-3">
+												System Statistics
+											</h3>
+											<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+												<div className="bg-card border border-border rounded-md p-4">
+													<div className="text-2xl font-bold text-primary">
+														{systemStats?.gamesPlayed ?? '—'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														Games played
+													</div>
+												</div>
+												<div className="bg-card border border-border rounded-md p-4">
+													<div className="text-2xl font-bold text-primary">
+														{systemStats?.players ?? '—'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														Players
+													</div>
+												</div>
+												<div className="bg-card border border-border rounded-md p-4">
+													<div className="text-2xl font-bold text-primary">
+														{systemStats?.rewardsDistributed ?? '—'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														Rewards distributed (HPLAY)
+													</div>
+												</div>
+												<div className="bg-card border border-border rounded-md p-4">
+													<div className="text-2xl font-bold text-primary">
+														{systemStats?.poolBalance ?? '—'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														Pool balance (HPLAY)
+													</div>
+												</div>
+												<div className="bg-card border border-border rounded-md p-4">
+													<div className="text-2xl font-bold text-primary">
+														{systemStats?.totalParticipants ?? '—'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														Lottery participants
+													</div>
+												</div>
+												<div className="bg-card border border-border rounded-md p-4">
+													<div
+														className={`text-2xl font-bold ${
+															systemStats?.initialized
+																? 'text-primary'
+																: 'text-destructive'
+														}`}
+													>
+														{systemStats?.initialized
+															? 'Initialized'
+															: 'Not initialized'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														Status
+													</div>
+												</div>
+											</div>
+										</div>
+									)}
+
+									{/* LotteryPool specific data */}
+									{activeTab === 'LotteryPool' && (
+										<div className="mt-6">
+											<h3 className="text-lg font-semibold text-foreground mb-3">
+												Lottery statistics
+											</h3>
+											<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+												<div className="bg-card border border-border rounded-md p-4">
+													<div className="text-2xl font-bold text-primary">
+														{lotteryInfo?.poolBalance ?? '—'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														Pool balance (HPLAY)
+													</div>
+												</div>
+												<div className="bg-card border border-border rounded-md p-4">
+													<div className="text-2xl font-bold text-primary">
+														{lotteryInfo?.totalParticipants ?? '—'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														Participants
+													</div>
+												</div>
+												<div className="bg-card border border-border rounded-md p-4">
+													<div className="text-2xl font-bold text-primary">
+														{lotteryInfo?.timeUntilNextDraw ?? '—'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														Time until next draw (s)
+													</div>
+												</div>
+												<div className="bg-card border border-border rounded-md p-4">
+													<div className="text-2xl font-bold text-primary">
+														{lotteryInfo?.lastDrawTimestamp ?? '—'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														Last draw (unix)
+													</div>
+												</div>
+												<div className="bg-card border border-border rounded-md p-4">
+													<div className="text-2xl font-bold text-primary">
+														{lotteryInfo?.drawInterval ?? '—'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														Draw interval (s)
+													</div>
+												</div>
+												{typeof lotteryInfo?.isParticipant !== 'undefined' && (
+													<div className="bg-card border border-border rounded-md p-4">
+														<div
+															className={`text-2xl font-bold ${
+																lotteryInfo?.isParticipant
+																	? 'text-primary'
+																	: 'text-destructive'
+															}`}
+														>
+															{lotteryInfo?.isParticipant
+																? 'You participate'
+																: 'You do not participate'}
+														</div>
+														<div className="text-xs text-muted-foreground">
+															Your status
+														</div>
+													</div>
+												)}
+
+												{/* FaucetManager specific data moved below to avoid nesting */}
+												{typeof lotteryInfo?.participantTxCount !==
+													'undefined' && (
+													<div className="bg-card border border-border rounded-md p-4">
+														<div className="text-2xl font-bold text-primary">
+															{lotteryInfo?.participantTxCount}
+														</div>
+														<div className="text-xs text-muted-foreground">
+															Your tx count
+														</div>
+													</div>
+												)}
+												{typeof lotteryInfo?.participantVolume !==
+													'undefined' && (
+													<div className="bg-card border border-border rounded-md p-4">
+														<div className="text-2xl font-bold text-primary">
+															{lotteryInfo?.participantVolume}
+														</div>
+														<div className="text-xs text-muted-foreground">
+															Your volume (HPLAY)
+														</div>
+													</div>
+												)}
+												{/* Participants list (optional) */}
+												<div className="bg-card border border-border rounded-md p-4 md:col-span-3">
+													<div className="text-sm font-semibold text-foreground mb-2">
+														Participants list
+													</div>
+													{Array.isArray(lotteryInfo?.participants) &&
+													lotteryInfo?.participants.length > 0 ? (
+														<div className="text-xs text-muted-foreground space-y-1 max-h-48 overflow-auto">
+															{lotteryInfo.participants
+																.slice(0, 100)
+																.map((addr, i) => (
+																	<div
+																		key={`lp-participant-${i}`}
+																		className="font-mono break-all"
+																	>
+																		{addr}
+																	</div>
+																))}
+															{lotteryInfo.participants.length > 100 && (
+																<div className="text-[10px] text-muted-foreground">
+																	Showing first 100 entries…
+																</div>
+															)}
+														</div>
+													) : (
+														<div className="text-xs text-muted-foreground">
+															No participants available
+														</div>
+													)}
+												</div>
+											</div>
+										</div>
+									)}
 								</div>
 							)}
 
