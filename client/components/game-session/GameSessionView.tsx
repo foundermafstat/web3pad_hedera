@@ -61,7 +61,7 @@ export function GameSessionView({ session }: GameSessionViewProps) {
 		<div className="container mx-auto px-4 py-8 max-w-7xl">
 			{/* Header */}
 			<div className="mb-8">
-				<FaLink
+				<Link
 					href="/"
 					className="text-sm text-muted-foreground hover:text-foreground mb-4 inline-block"
 				>

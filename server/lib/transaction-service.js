@@ -35,7 +35,7 @@ export class TransactionService {
      * @param {string} payerPrivateKey Private key for the payer account
      * @returns {Promise<Object>} Transaction result
      */
-    async executeContractTransaction(contractName, functionName, parameters = [], hbarAmount = 0, payerAccountId, payerPrivateKey) {
+    async executeContractTransaction(contractName, functionName, parameters = [], hbarAmount = 0, payerAccountId, payerPrivateKey, options = {}) {
         try {
             if (!this.client) {
                 throw new Error('Hedera client not initialized');
@@ -49,10 +49,13 @@ export class TransactionService {
             const payerKey = PrivateKey.fromString(payerPrivateKey);
             payerClient.setOperator(payerId, payerKey);
 
+            const gasLimit = options.gas || 1000000;
+            const maxFeeTinybars = options.maxFeeTinybars || 500000000; // 5 HBAR
+
             const transaction = new ContractExecuteTransaction()
                 .setContractId(config.contractId)
                 .setFunction(functionName, ...parameters)
-                .setGas(1000000); // Set gas limit to 1,000,000
+                .setGas(gasLimit); // Customizable gas limit
 
             // Add HBAR if specified
             if (hbarAmount > 0) {
@@ -60,7 +63,7 @@ export class TransactionService {
             }
 
             // Set max transaction fee
-            transaction.setMaxTransactionFee(Hbar.fromTinybars(500000000)); // 5 HBAR max fee
+            transaction.setMaxTransactionFee(Hbar.fromTinybars(maxFeeTinybars)); // Customizable max fee
 
             // Execute the transaction
             const response = await transaction.execute(payerClient);
@@ -441,18 +444,42 @@ export class TransactionService {
                 const publicKey = accountInfo.key;
                 console.log('✅ Got user public key for signature verification');
                 
-                // Decode signature from WalletConnect (usually base64)
+                // Decode signature from WalletConnect: support string and signatureMap objects
                 let signatureBytes;
                 if (typeof signedTransaction.signature === 'string') {
                     try {
-                        // Try base64 decode
+                        // Try base64 first
                         signatureBytes = Buffer.from(signedTransaction.signature, 'base64');
                         console.log('📦 Decoded signature from base64, length:', signatureBytes.length);
                     } catch (e) {
-                        // If not base64, try hex
-                        signatureBytes = Buffer.from(signedTransaction.signature, 'hex');
-                        console.log('📦 Decoded signature from hex, length:', signatureBytes.length);
+                        try {
+                            // Fallback to hex
+                            signatureBytes = Buffer.from(signedTransaction.signature, 'hex');
+                            console.log('📦 Decoded signature from hex, length:', signatureBytes.length);
+                        } catch (e2) {
+                            throw new Error('Unsupported signature string encoding');
+                        }
                     }
+                } else if (signedTransaction.signature && typeof signedTransaction.signature === 'object') {
+                    // signatureMap handling: pick the first sigPair and decode ed25519 or ECDSA bytes
+                    const sigMap = signedTransaction.signature;
+                    const pairs = sigMap.sigPair || sigMap.sigPairs || sigMap.pairs || [];
+                    const sigPair = Array.isArray(pairs) ? pairs[0] : pairs;
+                    const raw = sigPair?.ed25519 || sigPair?.ECDSA_secp256k1 || sigPair?.ecdsaSecp256k1;
+                    if (!raw) {
+                        throw new Error('Unsupported signatureMap format: no ed25519/ECDSA bytes');
+                    }
+                    // raw may already be base64; if it's a Uint8Array/array use directly
+                    if (typeof raw === 'string') {
+                        signatureBytes = Buffer.from(raw, 'base64');
+                    } else if (raw instanceof Uint8Array) {
+                        signatureBytes = Buffer.from(raw);
+                    } else if (Array.isArray(raw)) {
+                        signatureBytes = Buffer.from(Uint8Array.from(raw));
+                    } else {
+                        throw new Error('Unsupported signatureMap byte format');
+                    }
+                    console.log('📦 Decoded signature from signatureMap, length:', signatureBytes.length);
                 } else {
                     signatureBytes = Buffer.from(signedTransaction.signature);
                 }

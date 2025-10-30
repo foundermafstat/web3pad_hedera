@@ -2,7 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
-import { FaMobile, FaGamepad, RotateCw, FaVibrate, FaBolt, FaArrowLeft, FaWifi, FaBullseye, FaCog, FaGamepad as Joystick } from 'react-icons/fa';
+import { FaMobile, FaGamepad, FaRedo, FaBell, FaBolt, FaArrowLeft, FaWifi, FaBullseye, FaCog, FaGamepad as Joystick } from 'react-icons/fa';
 import { PageWithFooter } from '@/components/PageWithFooter';
 
 export default function ControllerPage() {
@@ -52,7 +52,7 @@ export default function ControllerPage() {
 					<Card className="text-center">
 						<CardHeader>
 							<div className="w-12 h-12 rounded-md bg-primary/10 flex items-center justify-center mx-auto mb-4">
-								<RotateCw className="w-6 h-6 text-primary" />
+								<FaRedo className="w-6 h-6 text-primary" />
 							</div>
 							<CardTitle>Gyroscope</CardTitle>
 							<CardDescription>
@@ -64,7 +64,7 @@ export default function ControllerPage() {
 					<Card className="text-center">
 						<CardHeader>
 							<div className="w-12 h-12 rounded-md bg-primary/10 flex items-center justify-center mx-auto mb-4">
-								<FaVibrate className="w-6 h-6 text-primary" />
+								<FaBell className="w-6 h-6 text-primary" />
 							</div>
 							<CardTitle>Haptic Feedback</CardTitle>
 							<CardDescription>
@@ -219,7 +219,7 @@ export default function ControllerPage() {
 								</div>
 								<div className="flex items-start gap-4">
 									<div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center flex-shrink-0">
-										<RotateCw className="w-5 h-5 text-primary" />
+										<FaRedo className="w-5 h-5 text-primary" />
 									</div>
 									<div>
 										<h4 className="font-semibold">Racing</h4>

@@ -1,6 +1,6 @@
 import express from 'express';
 import { contractService } from '../lib/contract-service.js';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware, optionalAuthMiddleware, getUserFromRequest } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -554,6 +554,40 @@ router.get('/account/:address/hbar-balance', async (req, res) => {
             success: false,
             error: 'Failed to fetch HBAR balance'
         });
+    }
+});
+
+/**
+ * @route POST /api/contracts/player-sbt/mint
+ * @desc Mint SBT for an authenticated user (server must have GAME_SERVER_ROLE)
+ * @access Auth optional: if token provided, uses user's primary wallet when address not provided
+ */
+router.post('/player-sbt/mint', optionalAuthMiddleware, async (req, res) => {
+    try {
+        const { userAddress, tokenUri } = req.body || {};
+
+        let targetAddress = userAddress;
+
+        // If authenticated and no address provided, use user's primary wallet
+        if (!targetAddress && req.user) {
+            const user = await getUserFromRequest(req);
+            const primary = user?.wallets?.find(w => w.isPrimary) || user?.wallets?.[0];
+            targetAddress = primary?.address || null;
+        }
+
+        if (!targetAddress) {
+            return res.status(400).json({
+                success: false,
+                error: 'userAddress is required or user must be authenticated with a wallet'
+            });
+        }
+
+        const result = await contractService.mintPlayerSBT(targetAddress, tokenUri || 'ipfs://player-sbt-default');
+
+        res.json({ success: true, data: result });
+    } catch (error) {
+        console.error('Error minting Player SBT:', error);
+        res.status(500).json({ success: false, error: error.message || 'Failed to mint Player SBT' });
     }
 });
 

@@ -278,6 +278,78 @@ export class ContractService {
     }
 
     /**
+     * Mint Player SBT for a user (server must have GAME_SERVER_ROLE)
+     * @param {string} playerAddress Hedera (0.0.x) or EVM (0x...) address of the player
+     * @param {string} tokenUri Metadata URI for the SBT
+     * @returns {Promise<Object>} Mint result
+     */
+    async mintPlayerSBT(playerAddress, tokenUri) {
+        try {
+            if (!transactionService.isAvailable()) {
+                throw new Error('Transaction service not available. Check Hedera configuration.');
+            }
+
+            const systemAccountId = process.env.HEDERA_ACCOUNT_ID;
+            const systemPrivateKey = process.env.HEDERA_PRIVATE_KEY;
+
+            if (!systemAccountId || !systemPrivateKey) {
+                throw new Error('System Hedera credentials are not configured (HEDERA_ACCOUNT_ID/HEDERA_PRIVATE_KEY).');
+            }
+
+            // Pre-check: prevent revert if player already has SBT
+            try {
+                const already = await this.hasSBT(playerAddress);
+                if (already) {
+                    throw new Error('Player already has SBT');
+                }
+            } catch (_) {}
+
+            // Convert player address to solidity 20-byte address for contract call
+            let solidityAddress = playerAddress;
+            try {
+                if (playerAddress && playerAddress.match(/^\d+\.\d+\.\d+$/)) {
+                    const acc = AccountId.fromString(playerAddress);
+                    solidityAddress = `0x${acc.toSolidityAddress()}`;
+                }
+            } catch {}
+
+            const params = new ContractFunctionParameters()
+                .addAddress(solidityAddress)
+                .addString(tokenUri || 'ipfs://player-sbt-default');
+
+            const result = await transactionService.executeContractTransaction(
+                'PlayerSBT',
+                'mintSBT',
+                [params],
+                0,
+                systemAccountId,
+                systemPrivateKey,
+                { gas: 2000000, maxFeeTinybars: 1000000000 }
+            );
+
+            return {
+                success: true,
+                transactionId: result.transactionId,
+                receipt: result.receipt,
+                contractFunctionResult: result.contractFunctionResult ? {
+                    // Some networks may return tokenId in logs/return; guard access
+                    raw: true
+                } : null
+            };
+        } catch (error) {
+            console.error('Error minting Player SBT:', error);
+            // Hint likely cause for revert: missing GAME_SERVER_ROLE or duplicate SBT
+            if (String(error?.message || '').includes('CONTRACT_REVERT_EXECUTED')) {
+                throw new Error('Mint reverted. Ensure the server operator has GAME_SERVER_ROLE on PlayerSBT and the player does not already have an SBT.');
+            }
+            if (String(error?.message || '').includes('already has SBT')) {
+                throw new Error('Mint blocked: player already has an SBT.');
+            }
+            throw error;
+        }
+    }
+
+    /**
      * Get player NFT count
      * @param {string} playerAddress Player address
      * @returns {Promise<number>} NFT count

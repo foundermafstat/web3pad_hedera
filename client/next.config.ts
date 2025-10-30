@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
 		// Allows production deployment even with TS errors
 		ignoreBuildErrors: true,
 	},
+	// Enable Turbopack (Next.js 16 default) even if webpack config exists
+	turbopack: {},
 	// Proxy API requests to backend server
 	async rewrites() {
 		return [
@@ -109,7 +111,6 @@ const nextConfig: NextConfig = {
 	// Fix multiple lockfiles warning - use root directory as workspace root
 	outputFileTracingRoot: '../',
 	webpack: (config, { isServer, dev }) => {
-
 		if (!isServer) {
 			config.resolve.fallback = {
 				...config.resolve.fallback,
@@ -135,12 +136,11 @@ const nextConfig: NextConfig = {
 					...config.optimization.splitChunks,
 					cacheGroups: {
 						...config.optimization.splitChunks.cacheGroups,
-						
 					},
 				},
 			};
 		}
-		
+
 		return config;
 	},
 };

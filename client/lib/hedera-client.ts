@@ -198,6 +198,28 @@ class HederaClient {
   }
 
   /**
+   * Mint Player SBT for a user
+   */
+  async mintPlayerSBT(userAddress: string, tokenUri?: string): Promise<{ transactionId: string }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/contracts/player-sbt/mint`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userAddress, tokenUri }),
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to mint Player SBT');
+      }
+
+      return { transactionId: data.data.transactionId };
+    } catch (error) {
+      throw error as Error;
+    }
+  }
+
+  /**
    * Get token balance for an account
    */
   async getTokenBalance(address: string): Promise<number> {

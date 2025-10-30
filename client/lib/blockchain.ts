@@ -488,8 +488,29 @@ export class BlockchainService {
       };
     }
   }
+
+  /**
+   * Get all contracts
+   */
+  async getContracts(): Promise<{ success: boolean; data?: any[]; error?: string }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/contracts`);
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error getting contracts:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }
 }
 
 // Export singleton instance
 export const blockchainService = new BlockchainService();
+
+// Export getContracts function
+export const getContracts = () => blockchainService.getContracts();
+
 export default blockchainService;

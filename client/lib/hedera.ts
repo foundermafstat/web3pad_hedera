@@ -256,21 +256,48 @@ export class HederaService {
    */
   async disconnect(): Promise<boolean> {
     try {
-      // Clear all stale sessions first
-      await this.clearStaleSessions();
-      
-      if (this.dAppConnector && this.currentSession) {
-        // Disconnect all sessions only if there is an active session
-        try {
-          await this.dAppConnector.disconnectAll();
-        } catch (error) {
-          // Ignore if no active session
-          console.log('No active session to disconnect');
-        }
+      if (!this.dAppConnector) {
         this.currentSession = null;
-        return true;
+        return false;
       }
-      return false;
+
+      const walletConnectClient = (this.dAppConnector as any).walletConnectClient;
+      let disconnected = false;
+
+      // Prefer targeted session delete when topic exists
+      if (this.currentSession && walletConnectClient?.session) {
+        const active = walletConnectClient.session.get(this.currentSession.topic);
+        if (active) {
+          try {
+            await walletConnectClient.session.delete(this.currentSession.topic, { message: 'User disconnected' });
+            disconnected = true;
+          } catch (err) {
+            console.warn('[HederaService] Failed targeted session delete, will fallback:', err);
+          }
+        }
+      }
+
+      // Fallback: attempt connector-wide disconnect, but guard errors
+      if (!disconnected) {
+        try {
+          if (typeof this.dAppConnector.disconnectAll === 'function') {
+            await this.dAppConnector.disconnectAll();
+            disconnected = true;
+          }
+        } catch (err) {
+          // Likely "No matching key" when topic already gone; safe to ignore
+          console.log('[HederaService] No active session to disconnect');
+        }
+      }
+
+      this.currentSession = null;
+
+      // Best-effort cleanup of any remaining stale sessions
+      try {
+        await this.clearStaleSessions();
+      } catch {}
+
+      return disconnected;
     } catch (error) {
       console.error('Error disconnecting from wallet:', error);
       return false;
@@ -286,8 +313,8 @@ export class HederaService {
         return true;
       }
       
-      // Only disconnect if there's an active session
-      if (this.currentSession) {
+      // Only disconnect if there's an active session (validate via client)
+      if (this.hasActiveSession()) {
         await this.disconnect();
       }
       

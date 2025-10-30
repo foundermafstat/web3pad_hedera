@@ -128,4 +128,24 @@ router.post('/faucet/swap', async (req, res) => {
     }
 });
 
+/**
+ * @route POST /api/contracts/player-sbt/mint
+ * @desc Mint SBT for a user. Server must have GAME_SERVER_ROLE on PlayerSBT.
+ * @access Public (expects userAddress in body)
+ */
+router.post('/player-sbt/mint', async (req, res) => {
+    try {
+        const { userAddress, tokenUri } = req.body || {};
+        if (!userAddress) {
+            return res.status(400).json({ success: false, error: 'userAddress is required' });
+        }
+
+        const result = await contractService.mintPlayerSBT(userAddress, tokenUri || 'ipfs://player-sbt-default');
+        res.json({ success: true, data: result });
+    } catch (error) {
+        console.error('Error minting Player SBT:', error);
+        res.status(500).json({ success: false, error: error.message || 'Failed to mint Player SBT' });
+    }
+});
+
 export default router;

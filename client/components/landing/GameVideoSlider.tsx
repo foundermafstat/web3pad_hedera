@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { FaPlay, FaUsers, FaClock, FaBullseye, FaChevronLeft, FaChevronRight, FaGamepad, FaBolt, FaTrophy, FaShield, FaPuzzlePiece, FaCar } from 'react-icons/fa';
+import { FaPlay, FaUsers, FaClock, FaBullseye, FaChevronLeft, FaChevronRight, FaGamepad, FaBolt, FaTrophy, FaShieldAlt, FaPuzzlePiece, FaCar } from 'react-icons/fa';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { GameInfo } from './types';
@@ -48,7 +48,7 @@ export default function GameVideoSlider({ games, onCreateRoomClick, onPlayGame }
 			'quiz': <FaPuzzlePiece className="w-4 h-4" />,
 			'race': <FaCar className="w-4 h-4" />,
 			'shooter': <FaBullseye className="w-4 h-4" />,
-			'tower-defence': <FaShield className="w-4 h-4" />,
+			'tower-defence': <FaShieldAlt className="w-4 h-4" />,
 			'gyro-test': <FaBolt className="w-4 h-4" />,
 			'default': <FaGamepad className="w-4 h-4" />
 		};

@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FaTrophy, FaMedal, FaStar, FaLock, FaBullseye, FaUsers, FaGamepad, FaBolt, FaAward, FaCrown, Gem } from 'react-icons/fa';
+import { FaTrophy, FaMedal, FaStar, FaLock, FaBullseye, FaUsers, FaGamepad, FaBolt, FaAward, FaCrown, FaGem } from 'react-icons/fa';
 
 interface Achievement {
 	id: string;
@@ -169,7 +169,7 @@ export function AchievementsView() {
 		{ id: 'social', name: 'Social', icon: Users },
 		{ id: 'education', name: 'Education', icon: Award },
 		{ id: 'strategy', name: 'Strategy', icon: Target },
-		{ id: 'collection', name: 'Collection', icon: Gem },
+		{ id: 'collection', name: 'Collection', icon: FaGem },
 		{ id: 'prestige', name: 'Prestige', icon: Crown },
 	];
 
