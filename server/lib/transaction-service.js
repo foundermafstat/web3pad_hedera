@@ -6,7 +6,9 @@ import {
     PrivateKey,
     TransactionResponse,
     TransactionReceipt,
-    AccountBalanceQuery
+    AccountBalanceQuery,
+    Transaction,
+    AccountInfoQuery
 } from '@hashgraph/sdk';
 import { initializeHederaClient, getContractConfig } from './hedera-config.js';
 
@@ -300,9 +302,10 @@ export class TransactionService {
      * @param {Object} signedTransaction Signed transaction data
      * @param {string} userAddress User's Hedera address
      * @param {number} hbarAmountTinybars Amount of HBAR to swap (in tinybars)
+     * @param {Array} originalTransactionBytes Original transaction bytes (optional)
      * @returns {Promise<Object>} Swap result
      */
-    async executeSignedSwapTransaction(signedTransaction, userAddress, hbarAmountTinybars) {
+    async executeSignedSwapTransaction(signedTransaction, userAddress, hbarAmountTinybars, originalTransactionBytes = null) {
         try {
             if (!this.client) {
                 throw new Error('Hedera client not initialized');
@@ -311,9 +314,79 @@ export class TransactionService {
             console.log('📝 Executing REAL signed transaction:', {
                 userAddress,
                 hbarAmount: hbarAmountTinybars / 100000000,
-                signature: signedTransaction.signature,
-                walletType: signedTransaction.walletType || 'unknown'
+                signature: signedTransaction.signature?.substring(0, 50) + '...',
+                walletType: signedTransaction.walletType || 'unknown',
+                hasOriginalBytes: !!originalTransactionBytes,
+                hasSignedTransactionBytes: !!signedTransaction.signedTransactionBytes
             });
+            
+            // Try to use fully signed transaction from WalletConnect if available
+            if (signedTransaction.signedTransactionBytes) {
+                try {
+                    console.log('✅ Using fully signed transaction from WalletConnect');
+                    let signedBytes;
+                    if (typeof signedTransaction.signedTransactionBytes === 'string') {
+                        // Base64 string - decode it
+                        signedBytes = Buffer.from(signedTransaction.signedTransactionBytes, 'base64');
+                    } else if (Array.isArray(signedTransaction.signedTransactionBytes)) {
+                        signedBytes = new Uint8Array(signedTransaction.signedTransactionBytes);
+                    } else {
+                        signedBytes = signedTransaction.signedTransactionBytes;
+                    }
+                    
+                    // Restore the fully signed transaction
+                    const signedTransactionObj = Transaction.fromBytes(signedBytes);
+                    
+                    // Execute the fully signed transaction
+                    const executorClient = initializeHederaClient();
+                    console.log('🚀 Executing fully signed transaction from wallet...');
+                    const response = await signedTransactionObj.execute(executorClient);
+                    
+                    if (response.errorMessage) {
+                        throw new Error(`Transaction failed: ${response.errorMessage}`);
+                    }
+
+                    const receipt = await response.getReceipt(executorClient);
+                    if (receipt.status.toString() !== 'SUCCESS') {
+                        throw new Error(`Transaction failed with status: ${receipt.status}`);
+                    }
+
+                    const record = await response.getRecord(executorClient);
+                    let hplayAmount = 0;
+                    if (record.contractFunctionResult) {
+                        hplayAmount = record.contractFunctionResult.getUint256(0).toNumber();
+                    }
+
+                    console.log('✅ REAL transaction executed successfully with signed transaction:', {
+                        transactionId: response.transactionId.toString(),
+                        hplayAmount: hplayAmount,
+                        gasUsed: receipt.gasUsed?.toNumber() || 0,
+                        walletType: signedTransaction.walletType,
+                        userAccountId: signedTransaction.accountId || userAddress
+                    });
+                    
+                    return {
+                        success: true,
+                        transactionId: response.transactionId.toString(),
+                        hbarAmount: hbarAmountTinybars,
+                        hplayAmount: hplayAmount,
+                        timestamp: Date.now(),
+                        userAddress: userAddress,
+                        receipt: {
+                            status: receipt.status.toString(),
+                            gasUsed: receipt.gasUsed?.toNumber() || 0,
+                            contractId: receipt.contractId?.toString(),
+                            accountId: receipt.accountId?.toString()
+                        },
+                        walletType: signedTransaction.walletType,
+                        isRealTransaction: true,
+                        userAccountId: signedTransaction.accountId || userAddress
+                    };
+                } catch (signedTxError) {
+                    console.warn('⚠️ Failed to use signed transaction bytes, falling back to manual transaction:', signedTxError.message);
+                    // Fall through to manual transaction creation
+                }
+            }
 
             // Only execute REAL transactions - no test mode
             console.log('🚀 Executing REAL transaction with wallet signature:', {
@@ -327,47 +400,108 @@ export class TransactionService {
             if (!signedTransaction.isRealTransaction) {
                 throw new Error('Only real wallet transactions are allowed. Please connect a Hedera wallet.');
             }
-            
-            const config = getContractConfig('FaucetManager');
-            
-            // Create transaction for the user's account
-            const transaction = new ContractExecuteTransaction()
-                .setContractId(config.contractId)
-                .setFunction('swapHBARforHPLAY')
-                .setPayableAmount(Hbar.fromTinybars(hbarAmountTinybars))
-                .setGas(1000000)
-                .setMaxTransactionFee(Hbar.fromTinybars(500000000));
 
-            // Execute using system account (in production, this would be the user's signed transaction)
-            const systemAccountId = process.env.HEDERA_ACCOUNT_ID;
-            const systemPrivateKey = process.env.HEDERA_PRIVATE_KEY;
-
-            if (!systemAccountId || !systemPrivateKey) {
-                throw new Error('System account credentials not configured');
+            // CRITICAL: We MUST use the original transaction that the user signed
+            // Creating a new transaction will result in INVALID_SIGNATURE error
+            // because the new transaction is not signed by the user's wallet
+            
+            if (!originalTransactionBytes || !Array.isArray(originalTransactionBytes)) {
+                throw new Error('Original transaction bytes are required to execute signed transaction. The transaction must match what the user signed.');
             }
-
-            // Create a new client instance for this transaction
-            const payerClient = initializeHederaClient();
-            const payerId = AccountId.fromString(systemAccountId);
-            const payerKey = PrivateKey.fromString(systemPrivateKey);
-            payerClient.setOperator(payerId, payerKey);
-
-            // Execute the transaction
-            const response = await transaction.execute(payerClient);
+            
+            console.log('📦 Restoring original transaction that user signed...');
+            
+            // Restore the exact transaction that user signed with their wallet
+            const transactionBytes = new Uint8Array(originalTransactionBytes);
+            let transaction = Transaction.fromBytes(transactionBytes);
+            
+            console.log('✅ Original transaction restored');
+            console.log('📝 Transaction payer account:', transaction.transactionId?.accountId?.toString());
+            
+            // CRITICAL: Add user's signature to the transaction
+            // The transaction is frozen but not signed - WalletConnect signed it and returned the signature
+            // We need to add that signature back to the transaction
+            
+            if (!signedTransaction.signature) {
+                throw new Error('User signature is required. Transaction was not signed by wallet.');
+            }
+            
+            console.log('✍️ Adding user signature to transaction...');
+            
+            // Get user's account info to get their public key
+            const userAccountId = AccountId.fromString(signedTransaction.accountId || userAddress);
+            const executorClient = initializeHederaClient();
+            
+            try {
+                // Query account info to get public key
+                const accountInfo = await new AccountInfoQuery()
+                    .setAccountId(userAccountId)
+                    .execute(executorClient);
+                
+                const publicKey = accountInfo.key;
+                console.log('✅ Got user public key for signature verification');
+                
+                // Decode signature from WalletConnect (usually base64)
+                let signatureBytes;
+                if (typeof signedTransaction.signature === 'string') {
+                    try {
+                        // Try base64 decode
+                        signatureBytes = Buffer.from(signedTransaction.signature, 'base64');
+                        console.log('📦 Decoded signature from base64, length:', signatureBytes.length);
+                    } catch (e) {
+                        // If not base64, try hex
+                        signatureBytes = Buffer.from(signedTransaction.signature, 'hex');
+                        console.log('📦 Decoded signature from hex, length:', signatureBytes.length);
+                    }
+                } else {
+                    signatureBytes = Buffer.from(signedTransaction.signature);
+                }
+                
+                // Add signature to transaction
+                // Transaction.addSignature requires PublicKey and signature bytes
+                transaction.addSignature(publicKey, signatureBytes);
+                console.log('✅ User signature added to transaction');
+                
+            } catch (accountError) {
+                console.warn('⚠️ Could not get account info, trying alternative method:', accountError.message);
+                // Alternative: Try to add signature without public key lookup
+                // This might work if signature format is correct
+                try {
+                    let signatureBytes;
+                    if (typeof signedTransaction.signature === 'string') {
+                        signatureBytes = Buffer.from(signedTransaction.signature, 'base64');
+                    } else {
+                        signatureBytes = Buffer.from(signedTransaction.signature);
+                    }
+                    
+                    // Try to get public key from account ID directly (may not work)
+                    // For now, we'll try executing with signature in transaction body
+                    console.log('⚠️ Attempting to execute without explicit signature addition');
+                } catch (e) {
+                    console.error('❌ Failed to process signature:', e);
+                    throw new Error(`Could not add signature to transaction: ${e.message}`);
+                }
+            }
+            
+            console.log('🚀 Executing transaction with user signature...');
+            console.log('💰 Transaction will execute from user account:', signedTransaction.accountId || userAddress);
+            
+            // Execute the signed transaction
+            const response = await transaction.execute(executorClient);
             
             if (response.errorMessage) {
                 throw new Error(`Transaction failed: ${response.errorMessage}`);
             }
 
             // Get the receipt
-            const receipt = await response.getReceipt(payerClient);
+            const receipt = await response.getReceipt(executorClient);
             
             if (receipt.status.toString() !== 'SUCCESS') {
                 throw new Error(`Transaction failed with status: ${receipt.status}`);
             }
 
             // Get the record for return values
-            const record = await response.getRecord(payerClient);
+            const record = await response.getRecord(executorClient);
             
             // Extract HPLAY amount from the result
             let hplayAmount = 0;
@@ -380,7 +514,7 @@ export class TransactionService {
                 hplayAmount: hplayAmount,
                 gasUsed: receipt.gasUsed?.toNumber() || 0,
                 walletType: signedTransaction.walletType,
-                userAccountId: signedTransaction.accountId,
+                userAccountId: signedTransaction.accountId || userAddress,
                 isRealWalletSignature: true
             });
             
@@ -399,11 +533,11 @@ export class TransactionService {
                 },
                 walletType: signedTransaction.walletType,
                 isRealTransaction: true,
-                userAccountId: signedTransaction.accountId
+                userAccountId: signedTransaction.accountId || userAddress
             };
 
         } catch (error) {
-            console.error('Error executing REAL signed swap transaction:', error);
+            console.error('❌ Error executing REAL signed swap transaction:', error);
             throw error;
         }
     }

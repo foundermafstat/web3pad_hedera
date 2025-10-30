@@ -217,8 +217,17 @@ export function SwapInterface() {
       
       console.log('✍️ Transaction signed by user');
       
-      // Step 3: Execute the signed transaction
-      const swapResult = await executeSignedTransaction(signedTransaction, userAddress, hbarAmountTinybars);
+      // Step 3: Execute the signed transaction (include original transaction bytes)
+      const originalTransactionBytes = transactionData.transactionData instanceof Uint8Array 
+        ? transactionData.transactionData 
+        : new Uint8Array(transactionData.transactionData);
+      
+      const swapResult = await executeSignedTransaction(
+        signedTransaction, 
+        userAddress, 
+        hbarAmountTinybars,
+        originalTransactionBytes
+      );
       
       console.log('✅ Real swap executed successfully:', swapResult);
       return swapResult;
@@ -360,7 +369,8 @@ export function SwapInterface() {
             transactionId: signature.transactionId || '',
             walletType: signature.walletType || 'walletconnect',
             isRealTransaction: true,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            signedTransactionBytes: signature.signedTransactionBytes // Include signed transaction if available
           };
         } catch (error: any) {
           walletConnectError = error instanceof Error ? error : new Error(String(error));
@@ -530,10 +540,20 @@ export function SwapInterface() {
     }
   };
 
-  const executeSignedTransaction = async (signedTransaction: any, userAddress: string, hbarAmountTinybars: number) => {
+  const executeSignedTransaction = async (
+    signedTransaction: any, 
+    userAddress: string, 
+    hbarAmountTinybars: number,
+    originalTransactionBytes?: Uint8Array
+  ) => {
     try {
-      // Submit the signed transaction to the server
-      const swapResult = await hederaClient.submitSignedTransaction(signedTransaction, userAddress, hbarAmountTinybars);
+      // Submit the signed transaction to the server with original transaction bytes
+      const swapResult = await hederaClient.submitSignedTransaction(
+        signedTransaction, 
+        userAddress, 
+        hbarAmountTinybars,
+        originalTransactionBytes
+      );
       
       return swapResult;
     } catch (error) {

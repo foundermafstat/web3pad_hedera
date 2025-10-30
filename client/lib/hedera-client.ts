@@ -130,8 +130,18 @@ class HederaClient {
   /**
    * Submit signed transaction to execute swap
    */
-  async submitSignedTransaction(signedTransaction: any, userAddress: string, hbarAmountTinybars: number): Promise<SwapResult> {
+  async submitSignedTransaction(
+    signedTransaction: any, 
+    userAddress: string, 
+    hbarAmountTinybars: number,
+    originalTransactionBytes?: Uint8Array
+  ): Promise<SwapResult> {
     try {
+      // Convert transaction bytes to array for JSON serialization if provided
+      const transactionBytesArray = originalTransactionBytes 
+        ? Array.from(originalTransactionBytes)
+        : null;
+
       const response = await fetch(`${this.baseUrl}/api/swap/submit-transaction`, {
         method: 'POST',
         headers: {
@@ -140,7 +150,8 @@ class HederaClient {
         body: JSON.stringify({
           signedTransaction,
           userAddress,
-          hbarAmount: hbarAmountTinybars / 100000000
+          hbarAmount: hbarAmountTinybars / 100000000,
+          originalTransactionBytes: transactionBytesArray
         })
       });
 

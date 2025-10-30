@@ -511,15 +511,24 @@ export class HederaService {
           hasResult: !!signResult,
           resultKeys: signResult ? Object.keys(signResult) : [],
           hasSignature: !!(signResult?.result?.signatureMap || signResult?.signatureMap || signResult?.signature),
-          hasTransactionId: !!(signResult?.result?.transactionId || signResult?.transactionId)
+          hasTransactionId: !!(signResult?.result?.transactionId || signResult?.transactionId),
+          fullResult: signResult // Log full result to see what WalletConnect returns
         });
+
+        // Check if WalletConnect returned a fully signed transaction
+        const signedTransactionBytes = signResult?.result?.signedTransaction || 
+                                       signResult?.signedTransaction ||
+                                       signResult?.result?.transactionBytes ||
+                                       signResult?.transactionBytes ||
+                                       null;
 
         return {
           signature: signResult?.result?.signatureMap || signResult?.signatureMap || signResult?.signature || '',
           accountId: accountId,
           transactionId: signResult?.result?.transactionId || signResult?.transactionId || '',
           walletType: 'walletconnect',
-          network: this.currentNetwork
+          network: this.currentNetwork,
+          signedTransactionBytes: signedTransactionBytes // Include signed transaction bytes if available
         };
       } catch (error: any) {
         console.error('[HederaService] Transaction signing failed:', error);

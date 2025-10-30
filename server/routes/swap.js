@@ -44,7 +44,7 @@ router.post('/create-transaction', async (req, res) => {
  */
 router.post('/submit-transaction', async (req, res) => {
     try {
-        const { signedTransaction, userAddress, hbarAmount } = req.body;
+        const { signedTransaction, userAddress, hbarAmount, originalTransactionBytes } = req.body;
         
         if (!signedTransaction || !userAddress || !hbarAmount) {
             return res.status(400).json({ success: false, error: 'Signed transaction, user address and HBAR amount are required' });
@@ -52,11 +52,12 @@ router.post('/submit-transaction', async (req, res) => {
         
         const hbarAmountTinybars = Math.floor(parseFloat(hbarAmount) * 100000000);
         
-        // Execute the signed transaction
+        // Execute the signed transaction with original transaction bytes
         const swapResult = await transactionService.executeSignedSwapTransaction(
             signedTransaction,
             userAddress,
-            hbarAmountTinybars
+            hbarAmountTinybars,
+            originalTransactionBytes
         );
         
         res.json({ success: true, data: swapResult });
