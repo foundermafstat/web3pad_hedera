@@ -8,7 +8,6 @@ interface GameDetailPageProps {
 
 export default async function GameDetailPage({ params }: GameDetailPageProps) {
 	const { gameCode } = await params;
-	
 	return (
 		<div className="min-h-screen bg-background">
 			<GameDetailView gameCode={gameCode} />

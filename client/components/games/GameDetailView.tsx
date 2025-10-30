@@ -82,14 +82,37 @@ export function GameDetailView({ gameCode }: GameDetailViewProps) {
 			.then((res) => res.json())
 			.then((data) => {
 				console.log('Game data received:', data);
-				const gameData = data.game;
-				
-				// Override images and videos with local files
+				if (!data || data.success === false || !data.game) {
+					setGame(null);
+					setLoading(false);
+					return;
+				}
+				const serverGame = data.game as Partial<GameType>;
 				const media = getGameMedia(gameCode);
-				gameData.images = media.images;
-				gameData.videos = media.videos;
-				
-				setGame(gameData);
+				const normalized: GameType = {
+					id: serverGame.id as string,
+					code: serverGame.code || gameCode,
+					name: serverGame.name || serverGame.code || gameCode,
+					shortDescription: serverGame.shortDescription || '',
+					fullDescription: serverGame.fullDescription || '',
+					icon: serverGame.icon || '🎮',
+					images: media.images || serverGame.images || [],
+					videos: media.videos || serverGame.videos || [],
+					category: (serverGame.category as string[]) || [],
+					gameType: serverGame.gameType || 'web2',
+					minPlayers: typeof serverGame.minPlayers === 'number' ? serverGame.minPlayers : 1,
+					maxPlayers: typeof serverGame.maxPlayers === 'number' ? serverGame.maxPlayers : 4,
+					difficulty: (serverGame.difficulty as string) || 'medium',
+					estimatedDuration: typeof serverGame.estimatedDuration === 'number' ? serverGame.estimatedDuration : undefined,
+					controls: (serverGame.controls as string[]) || [],
+					features: serverGame.features,
+					howToPlay: serverGame.howToPlay,
+					tips: serverGame.tips,
+					isFeatured: Boolean(serverGame.isFeatured),
+					gameAchievements: (serverGame.gameAchievements as GameAchievement[]) || [],
+				};
+
+				setGame(normalized);
 				setLoading(false);
 			})
 			.catch((error) => {

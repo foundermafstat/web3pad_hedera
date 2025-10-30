@@ -2,15 +2,13 @@ import { NextResponse } from 'next/server';
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001';
 
-interface RouteContext {
-	params: {
-		gameCode: string;
-	};
+interface RouteContextParams {
+	gameCode: string;
 }
 
-export async function GET(request: Request, { params }: RouteContext) {
+export async function GET(request: Request, context: { params: Promise<RouteContextParams> }) {
 	try {
-		const { gameCode } = params;
+		const { gameCode } = await context.params;
 		
 		const response = await fetch(`${SERVER_URL}/api/games/${gameCode}`, {
 			cache: 'no-store',

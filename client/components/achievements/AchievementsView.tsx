@@ -164,13 +164,13 @@ export function AchievementsView() {
 	}, []);
 
 	const categories = [
-		{ id: 'all', name: 'All Categories', icon: Trophy },
+		{ id: 'all', name: 'All Categories', icon: FaTrophy },
 		{ id: 'gameplay', name: 'Gameplay', icon: FaGamepad },
-		{ id: 'social', name: 'Social', icon: Users },
-		{ id: 'education', name: 'Education', icon: Award },
-		{ id: 'strategy', name: 'Strategy', icon: Target },
+		{ id: 'social', name: 'Social', icon: FaUsers },
+		{ id: 'education', name: 'Education', icon: FaAward },
+		{ id: 'strategy', name: 'Strategy', icon: FaBullseye },
 		{ id: 'collection', name: 'Collection', icon: FaGem },
-		{ id: 'prestige', name: 'Prestige', icon: Crown },
+		{ id: 'prestige', name: 'Prestige', icon: FaCrown },
 	];
 
 	const filteredAchievements = achievements.filter((achievement) => {
@@ -188,7 +188,7 @@ export function AchievementsView() {
 
 	const getCategoryIcon = (category: string) => {
 		const categoryData = categories.find(c => c.id === category);
-		return categoryData?.icon || Trophy;
+		return categoryData?.icon || FaTrophy;
 	};
 
 	const getRarityColor = (points: number) => {
