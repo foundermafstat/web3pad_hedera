@@ -5,6 +5,7 @@ import { ThemeProvider } from 'next-themes';
 import { ReactNode, useEffect } from 'react';
 import { registerServiceWorker } from '@/lib/sw-register';
 import { WalletProvider } from '@/contexts/WalletContext';
+import { installConsoleFilter } from '@/lib/console-filter';
 
 interface ProvidersProps {
 	children: ReactNode;
@@ -16,6 +17,8 @@ export function Providers({ children, session }: ProvidersProps) {
 		// Register Service Worker on mount (only on client side)
 		if (typeof window !== 'undefined') {
 			registerServiceWorker();
+			// Install console filter to suppress empty WalletConnect relay messages
+			installConsoleFilter();
 		}
 	}, []);
 

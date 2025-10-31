@@ -22,11 +22,11 @@ const HEDERA_CONFIG = {
 // Contract Addresses from deployment (Hedera format) - UPDATED WITH REAL ADDRESSES
 const CONTRACT_ADDRESSES = {
 	GameRegistry: process.env.GAME_REGISTRY_HEDERA_ID || '0.0.7153883', // 0xda0cbeae027b044648386e4c27e20c18257c885a
-	TokenEconomy: process.env.TOKEN_ECONOMY_HEDERA_ID || '0.0.7153884', // 0x0c8f77d99ff0a20c4b5308abe24163c70c781963
+	TokenEconomy: process.env.TOKEN_ECONOMY_HEDERA_ID || '0.0.7166662', // 0x23F6BB3A2c8BaBEe952E0443b6B7350aA85d6AB9 (V2)
 	LotteryPool: process.env.LOTTERY_POOL_HEDERA_ID || '0.0.7153886', // 0x9bb862643a73725e636dd7d7e30306844aa099f3
 	PlayerSBT: process.env.PLAYER_SBT_HEDERA_ID || '0.0.7153887', // 0xfe9CF4dde9fBc14d61D26703354AA10414B35Ea6
 	NFTManager: process.env.NFT_MANAGER_HEDERA_ID || '0.0.7153888', // 0x01Af1C62098d0217dEE7bC8A72dd93fa6D02b860
-	FaucetManager: process.env.FAUCET_MANAGER_HEDERA_ID || '0.0.7153889', // 0xe334AfEc78B410C953A9bEa0Ff1E55F74bdeC212
+	FaucetManager: process.env.FAUCET_MANAGER_HEDERA_ID || '0.0.7166663', // 0xEE9E9Daf635aAdcBe7725FAae73f6D38F66cfB3A (V2)
 	ResultVerifier: process.env.RESULT_VERIFIER_HEDERA_ID || '0.0.7153890', // 0xb1583369fe74fbf2d9b87b870fe67d6d0dc13b84
 	HederaGameLaunchpad:
 		process.env.HEDERA_GAME_LAUNCHPAD_HEDERA_ID || '0.0.7153891', // 0x54d13a05c632738674558f18de4394b7ee9a0399
@@ -76,11 +76,10 @@ const CONTRACT_ABIS = {
 		'function getTimeUntilNextDraw() view returns (uint256)',
 	],
 	FaucetManager: [
-		'function getUserSwapInfo(address user) view returns (tuple(uint256 totalSwappedToday, uint256 lastSwapTimestamp, uint256 swapsCount))',
-		'function getSwapRate() view returns (tuple(uint256 hbarToHplayRate, uint256 bonusMultiplierMin, uint256 bonusMultiplierMax, uint256 dailyLimitHbar, bool faucetEnabled))',
-		'function calculateBonusFactor(address user) view returns (uint256)',
-		'function getRemainingDailyLimit(address user) view returns (uint256)',
-		'function getFaucetStats() view returns (uint256, uint256, uint256, uint256)',
+		'function getUserInfo(address user) view returns (tuple(uint256 totalSwappedToday, uint256 lastSwapTimestamp, uint256 swapsCount))',
+		'function getSwapRate() view returns (tuple(uint256 hbarToHplayRate, uint256 dailyLimitHbar, bool enabled))',
+		'function getRemainingLimit(address user) view returns (uint256)',
+		'function swapHBARforHPLAY() payable returns (uint256)',
 	],
 	HederaGameLaunchpad: [
 		'function getSystemStats() view returns (uint256, uint256, uint256, uint256, uint256, bool)',

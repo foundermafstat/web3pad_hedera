@@ -79,7 +79,37 @@ export class HederaService {
         [chainId],
       );
 
-      await this.dAppConnector.init({ logger: 'error' });
+      // Suppress empty relay message errors by overriding console methods temporarily
+      const originalConsoleError = console.error;
+      const originalConsoleLog = console.log;
+      
+      // Filter out empty object logs from WalletConnect
+      console.error = (...args: any[]) => {
+        // Skip empty objects or objects with only standard Error properties
+        if (args.length === 1 && typeof args[0] === 'object' && args[0] !== null) {
+          const keys = Object.keys(args[0]);
+          if (keys.length === 0 || (keys.length <= 3 && keys.every(k => ['message', 'stack', 'name'].includes(k)))) {
+            return; // Suppress empty or trivial error objects
+          }
+        }
+        originalConsoleError.apply(console, args);
+      };
+      
+      console.log = (...args: any[]) => {
+        // Skip empty objects
+        if (args.length === 1 && typeof args[0] === 'object' && args[0] !== null && Object.keys(args[0]).length === 0) {
+          return; // Suppress empty log objects
+        }
+        originalConsoleLog.apply(console, args);
+      };
+
+      try {
+        await this.dAppConnector.init({ logger: 'error' });
+      } finally {
+        // Restore original console methods after initialization
+        console.error = originalConsoleError;
+        console.log = originalConsoleLog;
+      }
       
       // DAppConnector has internal session management
       // No need for manual event listeners
