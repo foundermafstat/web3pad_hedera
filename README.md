@@ -63,7 +63,7 @@ To play over local network, edit `client/env.config.ts`:
 const isProduction = process.env.NODE_ENV === 'production';
 
 export const ENV_CONFIG = {
-	BASE_URL: isProduction ? 'nft-dnd.xyz' : '192.168.1.43', // ← Replace with your local IP
+	BASE_URL: isProduction ? 'web3pad.xyz' : '192.168.1.43', // ← Replace with your local IP
 	CLIENT_PORT: isProduction ? 4444 : 3000,
 	SERVER_PORT: isProduction ? 5566 : 3001,
 	// ...
@@ -210,7 +210,7 @@ chmod +x deploy.sh
 
 The app automatically detects production environment (`NODE_ENV=production`) and uses production settings:
 
-- **Domain:** nft-dnd.xyz (HTTPS)
+- **Domain:** web3pad.xyz (HTTPS)
 - **Client Port:** 4444 (proxied by Nginx)
 - **Server Port:** 5566 (WebSocket)
 

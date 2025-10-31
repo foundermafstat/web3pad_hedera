@@ -530,6 +530,145 @@ export class ContractService {
     }
 
     /**
+     * PlayerSBT RPC methods using ethers
+     */
+    async hasSBTRpc(playerAddress) {
+        const contract = this.getEthersContract('PlayerSBT');
+        const addr = this.validateAddress(playerAddress);
+        const result = await contract.hasSBT(addr);
+        return Boolean(result);
+    }
+
+    async getPlayerStatsRpc(playerAddress) {
+        const contract = this.getEthersContract('PlayerSBT');
+        const addr = this.validateAddress(playerAddress);
+        const r = await contract.getPlayerStats(addr);
+        // tuple(uint256 totalGamesPlayed, uint256 totalWins, uint256 totalPoints, uint256 totalLosses, uint256 averageScore, uint256 lastGameTimestamp)
+        return {
+            totalGamesPlayed: Number(r[0] || 0),
+            totalWins: Number(r[1] || 0),
+            totalPoints: Number(r[2] || 0),
+            totalLosses: Number(r[3] || 0),
+            averageScore: Number(r[4] || 0),
+            lastGameTimestamp: Number(r[5] || 0)
+        };
+    }
+
+    async getGameSpecificStatsRpc(playerAddress, gameId) {
+        const contract = this.getEthersContract('PlayerSBT');
+        const addr = this.validateAddress(playerAddress);
+        const r = await contract.getGameSpecificStats(addr, gameId);
+        // tuple(uint256 gamesPlayed, uint256 totalScore, uint256 highestScore, uint256 wins, uint256 lastPlayed)
+        return {
+            gamesPlayed: Number(r[0] || 0),
+            totalScore: Number(r[1] || 0),
+            highestScore: Number(r[2] || 0),
+            wins: Number(r[3] || 0),
+            lastPlayed: Number(r[4] || 0)
+        };
+    }
+
+    async calculateRewardRpc(score, gameId) {
+        const contract = this.getEthersContract('PlayerSBT');
+        const result = await contract.calculateReward(score, gameId);
+        return Number(result || 0);
+    }
+
+    async getPlayerTokenIdRpc(playerAddress) {
+        const contract = this.getEthersContract('PlayerSBT');
+        const addr = this.validateAddress(playerAddress);
+        const result = await contract.getPlayerTokenId(addr);
+        return Number(result || 0);
+    }
+
+    async getTotalSBTsRpc() {
+        const contract = this.getEthersContract('PlayerSBT');
+        const result = await contract.getTotalSBTs();
+        return Number(result || 0);
+    }
+
+    /**
+     * GameRegistry RPC methods using ethers
+     */
+    async getGameModuleRpc(gameId) {
+        const contract = this.getEthersContract('GameRegistry');
+        const r = await contract.getGameModule(gameId);
+        // struct GameModule { address authorizedServer; bytes32 serverPublicKey; string gameId; string metadataURI; uint256 registrationTimestamp; bool isActive; uint256 nonce; }
+        return {
+            authorizedServer: r[0] || '0x0000000000000000000000000000000000000000',
+            serverPublicKey: r[1] || '0x0000000000000000000000000000000000000000000000000000000000000000',
+            gameId: r[2] || '',
+            metadataURI: r[3] || '',
+            registrationTimestamp: Number(r[4] || 0),
+            isActive: Boolean(r[5] || false),
+            nonce: Number(r[6] || 0)
+        };
+    }
+
+    async isValidServerRpc(gameId, serverAddress) {
+        const contract = this.getEthersContract('GameRegistry');
+        const addr = this.validateAddress(serverAddress);
+        const result = await contract.isValidServer(gameId, addr);
+        return Boolean(result);
+    }
+
+    async getDifficultyMultiplierRpc(gameId) {
+        const contract = this.getEthersContract('GameRegistry');
+        const result = await contract.getDifficultyMultiplier(gameId);
+        return Number(result || 0);
+    }
+
+    async getCurrentNonceRpc(gameId) {
+        const contract = this.getEthersContract('GameRegistry');
+        const result = await contract.getCurrentNonce(gameId);
+        return Number(result || 0);
+    }
+
+    /**
+     * NFTManager RPC methods using ethers
+     */
+    async getNFTRpc(tokenId) {
+        const contract = this.getEthersContract('NFTManager');
+        const r = await contract.getNFT(tokenId);
+        // struct AchievementNFT { uint256 tokenId; address owner; string achievementType; string metadataURI; uint256 mintedTimestamp; uint256 rarityScore; }
+        return {
+            tokenId: Number(r[0] || 0),
+            owner: r[1] || '0x0000000000000000000000000000000000000000',
+            achievementType: r[2] || '',
+            metadataURI: r[3] || '',
+            mintedTimestamp: Number(r[4] || 0),
+            rarityScore: Number(r[5] || 0)
+        };
+    }
+
+    async getPlayerNFTsRpc(playerAddress) {
+        const contract = this.getEthersContract('NFTManager');
+        const addr = this.validateAddress(playerAddress);
+        const result = await contract.getPlayerNFTs(addr);
+        // Returns uint256[] array
+        return Array.isArray(result) ? result.map(r => Number(r || 0)) : [];
+    }
+
+    async getPlayerNFTCountRpc(playerAddress) {
+        const contract = this.getEthersContract('NFTManager');
+        const addr = this.validateAddress(playerAddress);
+        const result = await contract.getPlayerNFTCount(addr);
+        return Number(result || 0);
+    }
+
+    async getRarityBurnFeeRpc(rarity) {
+        const contract = this.getEthersContract('NFTManager');
+        const result = await contract.getRarityBurnFee(rarity);
+        return Number(result || 0);
+    }
+
+    async getTotalNFTsRpc() {
+        const contract = this.getEthersContract('NFTManager');
+        const result = await contract.getTotalNFTs();
+        return Number(result || 0);
+    }
+
+    /**
      * Get time until next lottery draw
      * @returns {Promise<number>} Time in seconds
      */

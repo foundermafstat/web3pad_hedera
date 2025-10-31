@@ -73,6 +73,69 @@ export function ContractsClient({
 			remainingDaily?: number;
 		};
 	}>(null);
+	const [playerSBTInfo, setPlayerSBTInfo] = useState<null | {
+		totalSBTs?: number;
+		hasSBT?: boolean;
+		playerStats?: {
+			totalGamesPlayed: number;
+			totalWins: number;
+			totalPoints: number;
+			totalLosses: number;
+			averageScore: number;
+			lastGameTimestamp: number;
+		};
+		gameStats?: {
+			gamesPlayed: number;
+			totalScore: number;
+			highestScore: number;
+			wins: number;
+			lastPlayed: number;
+		};
+		tokenId?: number;
+		calculateReward?: number;
+		gameId?: string;
+		score?: number;
+	}>(null);
+	const [gameRegistryInfo, setGameRegistryInfo] = useState<null | {
+		gameId?: string;
+		gameModule?: {
+			authorizedServer: string;
+			serverPublicKey: string;
+			gameId: string;
+			metadataURI: string;
+			registrationTimestamp: number;
+			isActive: boolean;
+			nonce: number;
+		};
+		isValidServer?: {
+			serverAddress?: string;
+			isValid?: boolean;
+		};
+		difficultyMultiplier?: number;
+		currentNonce?: number;
+	}>(null);
+	const [gameIdInput, setGameIdInput] = useState('');
+	const [serverAddressInput, setServerAddressInput] = useState('');
+	const [nftManagerInfo, setNftManagerInfo] = useState<null | {
+		totalNFTs?: number;
+		tokenId?: string;
+		nft?: {
+			tokenId: number;
+			owner: string;
+			achievementType: string;
+			metadataURI: string;
+			mintedTimestamp: number;
+			rarityScore: number;
+		};
+		playerAddress?: string;
+		playerNFTs?: number[];
+		playerNFTCount?: number;
+		rarity?: string;
+		rarityBurnFee?: number;
+	}>(null);
+	const [nftTokenIdInput, setNftTokenIdInput] = useState('');
+	const [nftPlayerAddressInput, setNftPlayerAddressInput] = useState('');
+	const [nftRarityInput, setNftRarityInput] = useState('');
 	const [networkInfo, setNetworkInfo] = useState({
 		network: initialBlockchainStatus?.network || 'Testnet',
 		deployedContracts: initialContracts.length,
@@ -299,6 +362,238 @@ export function ContractsClient({
 		}
 	}, [activeTab]);
 
+	// Fetch PlayerSBT info when its tab becomes active
+	useEffect(() => {
+		const fetchPlayerSBT = async () => {
+			try {
+				const base =
+					process.env.NEXT_PUBLIC_SERVER_BASE_URL || 'http://localhost:3001';
+				const addr = getPlayerAddress();
+
+				// Fetch general info (total SBTs)
+				const [totalRes] = await Promise.all([
+					fetch(`${base}/api/contracts/player-sbt/rpc/total`, {
+						cache: 'no-store',
+					}),
+				]);
+				const totalJson = await totalRes.json();
+				const totalSBTs = totalJson?.data?.total ?? 0;
+
+				const info: any = {
+					totalSBTs,
+				};
+
+				// Fetch per-user info if address is available
+				if (addr) {
+					const [hasSBTRes, playerStatsRes, tokenIdRes] = await Promise.all([
+						fetch(`${base}/api/contracts/player-sbt/rpc/has-sbt/${addr}`, {
+							cache: 'no-store',
+						}),
+						fetch(`${base}/api/contracts/player-sbt/rpc/player-stats/${addr}`, {
+							cache: 'no-store',
+						}),
+						fetch(`${base}/api/contracts/player-sbt/rpc/token-id/${addr}`, {
+							cache: 'no-store',
+						}),
+					]);
+
+					const [hasSBTJson, playerStatsJson, tokenIdJson] = await Promise.all([
+						hasSBTRes.json(),
+						playerStatsRes.json(),
+						tokenIdRes.json(),
+					]);
+
+					info.hasSBT = hasSBTJson?.data?.hasSBT ?? false;
+					info.playerStats = playerStatsJson?.data ?? null;
+					info.tokenId = tokenIdJson?.data?.tokenId ?? null;
+				}
+
+				setPlayerSBTInfo(info);
+			} catch (_) {
+				// ignore
+			}
+		};
+
+		if (activeTab === 'PlayerSBT') {
+			fetchPlayerSBT();
+		}
+	}, [activeTab, session]);
+
+	// Fetch GameRegistry info when its tab becomes active or gameId changes
+	useEffect(() => {
+		const fetchGameRegistry = async () => {
+			if (!gameIdInput || gameIdInput.trim() === '') {
+				setGameRegistryInfo(null);
+				return;
+			}
+
+			try {
+				const base =
+					process.env.NEXT_PUBLIC_SERVER_BASE_URL || 'http://localhost:3001';
+				const gameId = gameIdInput.trim();
+
+				const [gameModuleRes, difficultyRes, nonceRes] = await Promise.all([
+					fetch(
+						`${base}/api/contracts/game-registry/rpc/game-module/${encodeURIComponent(
+							gameId
+						)}`,
+						{ cache: 'no-store' }
+					),
+					fetch(
+						`${base}/api/contracts/game-registry/rpc/difficulty-multiplier/${encodeURIComponent(
+							gameId
+						)}`,
+						{ cache: 'no-store' }
+					),
+					fetch(
+						`${base}/api/contracts/game-registry/rpc/current-nonce/${encodeURIComponent(
+							gameId
+						)}`,
+						{ cache: 'no-store' }
+					),
+				]);
+
+				const [gameModuleJson, difficultyJson, nonceJson] = await Promise.all([
+					gameModuleRes.json(),
+					difficultyRes.json(),
+					nonceRes.json(),
+				]);
+
+				const info: any = {
+					gameId,
+					gameModule: gameModuleJson?.data ?? null,
+					difficultyMultiplier: difficultyJson?.data?.multiplier ?? null,
+					currentNonce: nonceJson?.data?.nonce ?? null,
+				};
+
+				// If server address is provided, check if it's valid
+				if (serverAddressInput && serverAddressInput.trim() !== '') {
+					try {
+						const isValidRes = await fetch(
+							`${base}/api/contracts/game-registry/rpc/is-valid-server/${encodeURIComponent(
+								gameId
+							)}/${encodeURIComponent(serverAddressInput.trim())}`,
+							{ cache: 'no-store' }
+						);
+						const isValidJson = await isValidRes.json();
+						info.isValidServer = {
+							serverAddress: serverAddressInput.trim(),
+							isValid: isValidJson?.data?.isValid ?? false,
+						};
+					} catch (_) {
+						// ignore
+					}
+				}
+
+				setGameRegistryInfo(info);
+			} catch (_) {
+				// ignore
+			}
+		};
+
+		if (activeTab === 'GameRegistry') {
+			fetchGameRegistry();
+		}
+	}, [activeTab, gameIdInput, serverAddressInput]);
+
+	// Fetch NFTManager info when its tab becomes active
+	useEffect(() => {
+		const fetchNFTManager = async () => {
+			try {
+				const base =
+					process.env.NEXT_PUBLIC_SERVER_BASE_URL || 'http://localhost:3001';
+
+				// Fetch total NFTs
+				const totalRes = await fetch(
+					`${base}/api/contracts/nft-manager/rpc/total`,
+					{
+						cache: 'no-store',
+					}
+				);
+				const totalJson = await totalRes.json();
+				const totalNFTs = totalJson?.data?.total ?? 0;
+
+				const info: any = {
+					totalNFTs,
+				};
+
+				// Fetch NFT by tokenId if provided
+				if (nftTokenIdInput && nftTokenIdInput.trim() !== '') {
+					try {
+						const nftRes = await fetch(
+							`${base}/api/contracts/nft-manager/rpc/nft/${nftTokenIdInput.trim()}`,
+							{ cache: 'no-store' }
+						);
+						const nftJson = await nftRes.json();
+						if (nftJson?.success && nftJson?.data) {
+							info.tokenId = nftTokenIdInput.trim();
+							info.nft = nftJson.data;
+						}
+					} catch (_) {
+						// ignore
+					}
+				}
+
+				// Fetch player NFTs if address is provided
+				const addr = nftPlayerAddressInput.trim() || getPlayerAddress();
+				if (addr) {
+					try {
+						const [playerNFTsRes, playerCountRes] = await Promise.all([
+							fetch(
+								`${base}/api/contracts/nft-manager/rpc/player-nfts/${addr}`,
+								{ cache: 'no-store' }
+							),
+							fetch(
+								`${base}/api/contracts/nft-manager/rpc/player-nft-count/${addr}`,
+								{ cache: 'no-store' }
+							),
+						]);
+						const [playerNFTsJson, playerCountJson] = await Promise.all([
+							playerNFTsRes.json(),
+							playerCountRes.json(),
+						]);
+						info.playerAddress = addr;
+						info.playerNFTs = playerNFTsJson?.data?.tokenIds || [];
+						info.playerNFTCount = playerCountJson?.data?.count ?? 0;
+					} catch (_) {
+						// ignore
+					}
+				}
+
+				// Fetch rarity burn fee if rarity is provided
+				if (nftRarityInput && nftRarityInput.trim() !== '') {
+					try {
+						const rarityRes = await fetch(
+							`${base}/api/contracts/nft-manager/rpc/rarity-burn-fee/${encodeURIComponent(
+								nftRarityInput.trim()
+							)}`,
+							{ cache: 'no-store' }
+						);
+						const rarityJson = await rarityRes.json();
+						info.rarity = nftRarityInput.trim();
+						info.rarityBurnFee = rarityJson?.data?.fee ?? null;
+					} catch (_) {
+						// ignore
+					}
+				}
+
+				setNftManagerInfo(info);
+			} catch (_) {
+				// ignore
+			}
+		};
+
+		if (activeTab === 'NFTManager') {
+			fetchNFTManager();
+		}
+	}, [
+		activeTab,
+		nftTokenIdInput,
+		nftPlayerAddressInput,
+		nftRarityInput,
+		session,
+	]);
+
 	const handleContractSelect = (contract: CoreContract) => {
 		setSelectedContract(contract);
 		setActiveTab(contract.key);
@@ -342,163 +637,6 @@ export function ContractsClient({
 										{'Blockchain Connected'}
 									</div>
 								)}
-
-								{/* FaucetManager specific data shown in FaucetManager contract tab */}
-								{activeTab === 'FaucetManager' && (
-									<div className="mt-6">
-										<h3 className="text-lg font-semibold text-foreground mb-3">
-											Faucet statistics
-										</h3>
-										<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-											<div className="bg-card border border-border rounded-md p-4">
-												<div className="text-2xl font-bold text-primary">
-													{faucetInfo?.hbarToHplayRate ?? '—'}
-												</div>
-												<div className="text-xs text-muted-foreground">
-													HBAR-&gt;HPLAY rate
-												</div>
-											</div>
-											<div className="bg-card border border-border rounded-md p-4">
-												<div className="text-2xl font-bold text-primary">
-													{faucetInfo?.bonusMultiplierMin ?? '—'}
-												</div>
-												<div className="text-xs text-muted-foreground">
-													Bonus min (x100)
-												</div>
-											</div>
-											<div className="bg-card border border-border rounded-md p-4">
-												<div className="text-2xl font-bold text-primary">
-													{faucetInfo?.bonusMultiplierMax ?? '—'}
-												</div>
-												<div className="text-xs text-muted-foreground">
-													Bonus max (x100)
-												</div>
-											</div>
-											<div className="bg-card border border-border rounded-md p-4">
-												<div className="text-2xl font-bold text-primary">
-													{faucetInfo?.dailyLimitHbar ?? '—'}
-												</div>
-												<div className="text-xs text-muted-foreground">
-													Daily limit (tinyHBAR)
-												</div>
-											</div>
-											<div className="bg-card border border-border rounded-md p-4">
-												<div
-													className={`text-2xl font-bold ${
-														faucetInfo?.faucetEnabled
-															? 'text-primary'
-															: 'text-destructive'
-													}`}
-												>
-													{faucetInfo?.faucetEnabled ? 'Enabled' : 'Disabled'}
-												</div>
-												<div className="text-xs text-muted-foreground">
-													Faucet state
-												</div>
-											</div>
-											<div className="bg-card border border-border rounded-md p-4">
-												<div className="text-2xl font-bold text-primary">
-													{faucetInfo?.totalDistributed ?? '—'}
-												</div>
-												<div className="text-xs text-muted-foreground">
-													Total distributed (HPLAY)
-												</div>
-											</div>
-											<div className="bg-card border border-border rounded-md p-4">
-												<div className="text-2xl font-bold text-primary">
-													{faucetInfo?.totalUsers ?? '—'}
-												</div>
-												<div className="text-xs text-muted-foreground">
-													Total users
-												</div>
-											</div>
-											<div className="bg-card border border-border rounded-md p-4">
-												<div className="text-2xl font-bold text-primary">
-													{faucetInfo?.totalSwaps ?? '—'}
-												</div>
-												<div className="text-xs text-muted-foreground">
-													Total swaps
-												</div>
-											</div>
-											<div className="bg-card border border-border rounded-md p-4">
-												<div className="text-2xl font-bold text-primary">
-													{faucetInfo?.totalHbar ?? '—'}
-												</div>
-												<div className="text-xs text-muted-foreground">
-													Total HBAR received (tinyHBAR)
-												</div>
-											</div>
-											{faucetInfo?.user && (
-												<>
-													<div className="bg-card border border-border rounded-md p-4">
-														<div className="text-2xl font-bold text-primary">
-															{faucetInfo.user.dailyUsedHbar}
-														</div>
-														<div className="text-xs text-muted-foreground">
-															Your daily used (tinyHBAR)
-														</div>
-													</div>
-													<div className="bg-card border border-border rounded-md p-4">
-														<div className="text-2xl font-bold text-primary">
-															{faucetInfo.user.lastSwapTimestamp}
-														</div>
-														<div className="text-xs text-muted-foreground">
-															Your last swap (unix)
-														</div>
-													</div>
-													<div className="bg-card border border-border rounded-md p-4">
-														<div className="text-2xl font-bold text-primary">
-															{faucetInfo.user.totalSwaps}
-														</div>
-														<div className="text-xs text-muted-foreground">
-															Your swaps
-														</div>
-													</div>
-													{typeof faucetInfo.user.bonusFactor !==
-														'undefined' && (
-														<div className="bg-card border border-border rounded-md p-4">
-															<div className="text-2xl font-bold text-primary">
-																{faucetInfo.user.bonusFactor}
-															</div>
-															<div className="text-xs text-muted-foreground">
-																Your bonus factor (x100)
-															</div>
-														</div>
-													)}
-													{typeof faucetInfo.user.remainingDaily !==
-														'undefined' && (
-														<div className="bg-card border border-border rounded-md p-4">
-															<div className="text-2xl font-bold text-primary">
-																{faucetInfo.user.remainingDaily}
-															</div>
-															<div className="text-xs text-muted-foreground">
-																Your remaining daily (tinyHBAR)
-															</div>
-														</div>
-													)}
-													{typeof faucetInfo.user.isNewDay !== 'undefined' && (
-														<div className="bg-card border border-border rounded-md p-4">
-															<div
-																className={`text-2xl font-bold ${
-																	faucetInfo.user.isNewDay
-																		? 'text-primary'
-																		: 'text-muted-foreground'
-																}`}
-															>
-																{faucetInfo.user.isNewDay
-																	? 'New day'
-																	: 'Same day'}
-															</div>
-															<div className="text-xs text-muted-foreground">
-																Day status
-															</div>
-														</div>
-													)}
-												</>
-											)}
-										</div>
-									</div>
-								)}
 							</div>
 							<div className="flex items-center space-x-4">
 								{session && (
@@ -515,7 +653,7 @@ export function ContractsClient({
 				</div>
 
 				<div className="bg-card border border-border rounded-md mb-6">
-					<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+					<div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
 						<nav className="flex space-x-8">
 							{[
 								{
@@ -554,7 +692,7 @@ export function ContractsClient({
 					</div>
 				</div>
 
-				<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+				<div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
 					{coreContracts.length === 0 &&
 						blockchainStatus &&
 						!blockchainStatus.enabled && (
@@ -635,7 +773,7 @@ export function ContractsClient({
 									</div>
 								</div>
 
-								<div className="bg-card border border-border rounded-md p-6">
+								<div className="bg-card border border-border rounded-md p-6 mb-10">
 									<h2 className="text-xl font-bold text-foreground mb-4">
 										Contracts (current addresses)
 									</h2>
@@ -664,15 +802,6 @@ export function ContractsClient({
 										))}
 									</div>
 								</div>
-
-								{coreContracts.length > 0 && (
-									<div className="bg-card border border-border rounded-md p-6">
-										<h2 className="text-xl font-bold text-foreground mb-4">
-											Core Contracts
-										</h2>
-										<div className="grid grid-cols-1 md:grid-cols-2 xl-grid-cols-3 gap-4"></div>
-									</div>
-								)}
 							</div>
 						)}
 
@@ -901,6 +1030,633 @@ export function ContractsClient({
 														</div>
 													)}
 												</div>
+											</div>
+										</div>
+									)}
+
+									{/* PlayerSBT specific data */}
+									{activeTab === 'PlayerSBT' && (
+										<div className="mt-6">
+											<h3 className="text-lg font-semibold text-foreground mb-3">
+												PlayerSBT Statistics
+											</h3>
+											<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+												<div className="bg-card border border-border rounded-md p-4">
+													<div className="text-2xl font-bold text-primary">
+														{playerSBTInfo?.totalSBTs ?? '—'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														Total SBTs
+													</div>
+												</div>
+												{typeof playerSBTInfo?.hasSBT !== 'undefined' && (
+													<div className="bg-card border border-border rounded-md p-4">
+														<div
+															className={`text-2xl font-bold ${
+																playerSBTInfo.hasSBT
+																	? 'text-primary'
+																	: 'text-destructive'
+															}`}
+														>
+															{playerSBTInfo.hasSBT ? 'Has SBT' : 'No SBT'}
+														</div>
+														<div className="text-xs text-muted-foreground">
+															SBT Status
+														</div>
+													</div>
+												)}
+												{typeof playerSBTInfo?.tokenId !== 'undefined' &&
+													playerSBTInfo.tokenId !== null && (
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-2xl font-bold text-primary">
+																{playerSBTInfo.tokenId}
+															</div>
+															<div className="text-xs text-muted-foreground">
+																Your Token ID
+															</div>
+														</div>
+													)}
+												{playerSBTInfo?.playerStats && (
+													<>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-2xl font-bold text-primary">
+																{playerSBTInfo.playerStats.totalGamesPlayed ??
+																	'—'}
+															</div>
+															<div className="text-xs text-muted-foreground">
+																Total games played
+															</div>
+														</div>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-2xl font-bold text-primary">
+																{playerSBTInfo.playerStats.totalWins ?? '—'}
+															</div>
+															<div className="text-xs text-muted-foreground">
+																Total wins
+															</div>
+														</div>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-2xl font-bold text-primary">
+																{playerSBTInfo.playerStats.totalLosses ?? '—'}
+															</div>
+															<div className="text-xs text-muted-foreground">
+																Total losses
+															</div>
+														</div>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-2xl font-bold text-primary">
+																{playerSBTInfo.playerStats.totalPoints ?? '—'}
+															</div>
+															<div className="text-xs text-muted-foreground">
+																Total points
+															</div>
+														</div>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-2xl font-bold text-primary">
+																{playerSBTInfo.playerStats.averageScore ?? '—'}
+															</div>
+															<div className="text-xs text-muted-foreground">
+																Average score
+															</div>
+														</div>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-2xl font-bold text-primary">
+																{playerSBTInfo.playerStats.lastGameTimestamp
+																	? new Date(
+																			playerSBTInfo.playerStats
+																				.lastGameTimestamp * 1000
+																	  ).toLocaleString()
+																	: '—'}
+															</div>
+															<div className="text-xs text-muted-foreground">
+																Last game timestamp
+															</div>
+														</div>
+													</>
+												)}
+											</div>
+											{playerSBTInfo?.playerStats && (
+												<div className="mt-6">
+													<h4 className="text-md font-semibold text-foreground mb-3">
+														Game-specific Stats (requires gameId)
+													</h4>
+													<div className="bg-card border border-border rounded-md p-4">
+														<p className="text-sm text-muted-foreground">
+															To view game-specific statistics, use the API
+															endpoint with a gameId parameter
+														</p>
+													</div>
+												</div>
+											)}
+										</div>
+									)}
+
+									{/* GameRegistry specific data */}
+									{activeTab === 'GameRegistry' && (
+										<div className="mt-6">
+											<h3 className="text-lg font-semibold text-foreground mb-3">
+												GameRegistry Statistics
+											</h3>
+											<div className="mb-4 space-y-3">
+												<div>
+													<label className="block text-sm font-medium text-foreground mb-1">
+														Game ID
+													</label>
+													<input
+														type="text"
+														value={gameIdInput}
+														onChange={(e) => setGameIdInput(e.target.value)}
+														placeholder="Enter game ID (e.g., shooter-game)"
+														className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+													/>
+												</div>
+												<div>
+													<label className="block text-sm font-medium text-foreground mb-1">
+														Server Address (optional, for isValidServer check)
+													</label>
+													<input
+														type="text"
+														value={serverAddressInput}
+														onChange={(e) =>
+															setServerAddressInput(e.target.value)
+														}
+														placeholder="Enter server address (0x...)"
+														className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+													/>
+												</div>
+											</div>
+											{gameRegistryInfo && (
+												<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+													{typeof gameRegistryInfo.difficultyMultiplier !==
+														'undefined' &&
+														gameRegistryInfo.difficultyMultiplier !== null && (
+															<div className="bg-card border border-border rounded-md p-4">
+																<div className="text-2xl font-bold text-primary">
+																	{gameRegistryInfo.difficultyMultiplier}
+																</div>
+																<div className="text-xs text-muted-foreground">
+																	Difficulty multiplier (x1000)
+																</div>
+															</div>
+														)}
+													{typeof gameRegistryInfo.currentNonce !==
+														'undefined' &&
+														gameRegistryInfo.currentNonce !== null && (
+															<div className="bg-card border border-border rounded-md p-4">
+																<div className="text-2xl font-bold text-primary">
+																	{gameRegistryInfo.currentNonce}
+																</div>
+																<div className="text-xs text-muted-foreground">
+																	Current nonce
+																</div>
+															</div>
+														)}
+													{gameRegistryInfo.isValidServer && (
+														<div className="bg-card border border-border rounded-md p-4">
+															<div
+																className={`text-2xl font-bold ${
+																	gameRegistryInfo.isValidServer.isValid
+																		? 'text-primary'
+																		: 'text-destructive'
+																}`}
+															>
+																{gameRegistryInfo.isValidServer.isValid
+																	? 'Valid'
+																	: 'Invalid'}
+															</div>
+															<div className="text-xs text-muted-foreground">
+																Server validation
+															</div>
+														</div>
+													)}
+												</div>
+											)}
+											{gameRegistryInfo?.gameModule && (
+												<div className="mt-6">
+													<h4 className="text-md font-semibold text-foreground mb-3">
+														Game Module Information
+													</h4>
+													<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-xs text-muted-foreground mb-1">
+																Game ID
+															</div>
+															<div className="text-sm font-mono text-foreground break-all">
+																{gameRegistryInfo.gameModule.gameId || '—'}
+															</div>
+														</div>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-xs text-muted-foreground mb-1">
+																Authorized Server
+															</div>
+															<div className="text-sm font-mono text-foreground break-all">
+																{gameRegistryInfo.gameModule.authorizedServer ||
+																	'—'}
+															</div>
+														</div>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-xs text-muted-foreground mb-1">
+																Server Public Key
+															</div>
+															<div className="text-sm font-mono text-foreground break-all">
+																{gameRegistryInfo.gameModule.serverPublicKey ||
+																	'—'}
+															</div>
+														</div>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-xs text-muted-foreground mb-1">
+																Metadata URI
+															</div>
+															<div className="text-sm font-mono text-foreground break-all">
+																{gameRegistryInfo.gameModule.metadataURI || '—'}
+															</div>
+														</div>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-xs text-muted-foreground mb-1">
+																Registration Timestamp
+															</div>
+															<div className="text-sm text-foreground">
+																{gameRegistryInfo.gameModule
+																	.registrationTimestamp
+																	? new Date(
+																			gameRegistryInfo.gameModule
+																				.registrationTimestamp * 1000
+																	  ).toLocaleString()
+																	: '—'}
+															</div>
+														</div>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div
+																className={`text-xs font-semibold mb-1 ${
+																	gameRegistryInfo.gameModule.isActive
+																		? 'text-primary'
+																		: 'text-destructive'
+																}`}
+															>
+																Status
+															</div>
+															<div className="text-sm text-foreground">
+																{gameRegistryInfo.gameModule.isActive
+																	? 'Active'
+																	: 'Inactive'}
+															</div>
+														</div>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-xs text-muted-foreground mb-1">
+																Nonce (from GameModule)
+															</div>
+															<div className="text-sm text-foreground">
+																{gameRegistryInfo.gameModule.nonce ?? '—'}
+															</div>
+														</div>
+													</div>
+												</div>
+											)}
+											{!gameIdInput && (
+												<div className="mt-4 p-4 bg-card border border-border rounded-md">
+													<p className="text-sm text-muted-foreground">
+														Enter a Game ID above to view game registry
+														information
+													</p>
+												</div>
+											)}
+										</div>
+									)}
+
+									{/* NFTManager specific data */}
+									{activeTab === 'NFTManager' && (
+										<div className="mt-6">
+											<h3 className="text-lg font-semibold text-foreground mb-3">
+												NFTManager Statistics
+											</h3>
+											<div className="mb-4 space-y-3">
+												<div>
+													<label className="block text-sm font-medium text-foreground mb-1">
+														Token ID (optional, to view specific NFT)
+													</label>
+													<input
+														type="text"
+														value={nftTokenIdInput}
+														onChange={(e) => setNftTokenIdInput(e.target.value)}
+														placeholder="Enter NFT token ID"
+														className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+													/>
+												</div>
+												<div>
+													<label className="block text-sm font-medium text-foreground mb-1">
+														Player Address (optional, defaults to your address)
+													</label>
+													<input
+														type="text"
+														value={nftPlayerAddressInput}
+														onChange={(e) =>
+															setNftPlayerAddressInput(e.target.value)
+														}
+														placeholder="Enter player address (0x...)"
+														className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+													/>
+												</div>
+												<div>
+													<label className="block text-sm font-medium text-foreground mb-1">
+														Rarity (optional, to view burn fee)
+													</label>
+													<input
+														type="text"
+														value={nftRarityInput}
+														onChange={(e) => setNftRarityInput(e.target.value)}
+														placeholder="Enter rarity (common, rare, epic, legendary)"
+														className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+													/>
+												</div>
+											</div>
+											{nftManagerInfo && (
+												<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+													<div className="bg-card border border-border rounded-md p-4">
+														<div className="text-2xl font-bold text-primary">
+															{nftManagerInfo.totalNFTs ?? '—'}
+														</div>
+														<div className="text-xs text-muted-foreground">
+															Total NFTs
+														</div>
+													</div>
+													{typeof nftManagerInfo.playerNFTCount !==
+														'undefined' &&
+														nftManagerInfo.playerNFTCount !== null && (
+															<div className="bg-card border border-border rounded-md p-4">
+																<div className="text-2xl font-bold text-primary">
+																	{nftManagerInfo.playerNFTCount}
+																</div>
+																<div className="text-xs text-muted-foreground">
+																	Player NFT count
+																</div>
+															</div>
+														)}
+													{typeof nftManagerInfo.rarityBurnFee !==
+														'undefined' &&
+														nftManagerInfo.rarityBurnFee !== null && (
+															<div className="bg-card border border-border rounded-md p-4">
+																<div className="text-2xl font-bold text-primary">
+																	{nftManagerInfo.rarityBurnFee}
+																</div>
+																<div className="text-xs text-muted-foreground">
+																	Rarity burn fee (
+																	{nftManagerInfo.rarity || 'unknown'})
+																</div>
+															</div>
+														)}
+												</div>
+											)}
+											{nftManagerInfo?.nft && (
+												<div className="mt-6">
+													<h4 className="text-md font-semibold text-foreground mb-3">
+														NFT Information (Token ID:{' '}
+														{nftManagerInfo.nft.tokenId})
+													</h4>
+													<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-xs text-muted-foreground mb-1">
+																Token ID
+															</div>
+															<div className="text-sm text-foreground">
+																{nftManagerInfo.nft.tokenId ?? '—'}
+															</div>
+														</div>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-xs text-muted-foreground mb-1">
+																Owner
+															</div>
+															<div className="text-sm font-mono text-foreground break-all">
+																{nftManagerInfo.nft.owner || '—'}
+															</div>
+														</div>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-xs text-muted-foreground mb-1">
+																Achievement Type
+															</div>
+															<div className="text-sm text-foreground">
+																{nftManagerInfo.nft.achievementType || '—'}
+															</div>
+														</div>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-xs text-muted-foreground mb-1">
+																Rarity Score
+															</div>
+															<div className="text-sm text-foreground">
+																{nftManagerInfo.nft.rarityScore ?? '—'}
+															</div>
+														</div>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-xs text-muted-foreground mb-1">
+																Metadata URI
+															</div>
+															<div className="text-sm font-mono text-foreground break-all">
+																{nftManagerInfo.nft.metadataURI || '—'}
+															</div>
+														</div>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-xs text-muted-foreground mb-1">
+																Minted Timestamp
+															</div>
+															<div className="text-sm text-foreground">
+																{nftManagerInfo.nft.mintedTimestamp
+																	? new Date(
+																			nftManagerInfo.nft.mintedTimestamp * 1000
+																	  ).toLocaleString()
+																	: '—'}
+															</div>
+														</div>
+													</div>
+												</div>
+											)}
+											{nftManagerInfo?.playerNFTs &&
+												nftManagerInfo.playerNFTs.length > 0 && (
+													<div className="mt-6">
+														<h4 className="text-md font-semibold text-foreground mb-3">
+															Player NFTs (Address:{' '}
+															{nftManagerInfo.playerAddress})
+														</h4>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-xs text-muted-foreground mb-2">
+																Token IDs
+															</div>
+															<div className="text-sm text-foreground space-y-1 max-h-48 overflow-auto">
+																{nftManagerInfo.playerNFTs.length > 0 ? (
+																	nftManagerInfo.playerNFTs.map(
+																		(tokenId, i) => (
+																			<div
+																				key={`nft-${i}`}
+																				className="font-mono"
+																			>
+																				{tokenId}
+																			</div>
+																		)
+																	)
+																) : (
+																	<div className="text-muted-foreground">
+																		No NFTs found
+																	</div>
+																)}
+															</div>
+														</div>
+													</div>
+												)}
+										</div>
+									)}
+
+									{/* FaucetManager specific data */}
+									{activeTab === 'FaucetManager' && (
+										<div className="mt-6">
+											<h3 className="text-lg font-semibold text-foreground mb-3">
+												Faucet statistics
+											</h3>
+											<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+												<div className="bg-card border border-border rounded-md p-4">
+													<div className="text-2xl font-bold text-primary">
+														{faucetInfo?.hbarToHplayRate ?? '—'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														HBAR-&gt;HPLAY rate
+													</div>
+												</div>
+												<div className="bg-card border border-border rounded-md p-4">
+													<div className="text-2xl font-bold text-primary">
+														{faucetInfo?.bonusMultiplierMin ?? '—'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														Bonus min (x100)
+													</div>
+												</div>
+												<div className="bg-card border border-border rounded-md p-4">
+													<div className="text-2xl font-bold text-primary">
+														{faucetInfo?.bonusMultiplierMax ?? '—'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														Bonus max (x100)
+													</div>
+												</div>
+												<div className="bg-card border border-border rounded-md p-4">
+													<div className="text-2xl font-bold text-primary">
+														{faucetInfo?.dailyLimitHbar ?? '—'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														Daily limit (tinyHBAR)
+													</div>
+												</div>
+												<div className="bg-card border border-border rounded-md p-4">
+													<div
+														className={`text-2xl font-bold ${
+															faucetInfo?.faucetEnabled
+																? 'text-primary'
+																: 'text-destructive'
+														}`}
+													>
+														{faucetInfo?.faucetEnabled ? 'Enabled' : 'Disabled'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														Faucet state
+													</div>
+												</div>
+												<div className="bg-card border border-border rounded-md p-4">
+													<div className="text-2xl font-bold text-primary">
+														{faucetInfo?.totalDistributed ?? '—'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														Total distributed (HPLAY)
+													</div>
+												</div>
+												<div className="bg-card border border-border rounded-md p-4">
+													<div className="text-2xl font-bold text-primary">
+														{faucetInfo?.totalUsers ?? '—'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														Total users
+													</div>
+												</div>
+												<div className="bg-card border border-border rounded-md p-4">
+													<div className="text-2xl font-bold text-primary">
+														{faucetInfo?.totalSwaps ?? '—'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														Total swaps
+													</div>
+												</div>
+												<div className="bg-card border border-border rounded-md p-4">
+													<div className="text-2xl font-bold text-primary">
+														{faucetInfo?.totalHbar ?? '—'}
+													</div>
+													<div className="text-xs text-muted-foreground">
+														Total HBAR received (tinyHBAR)
+													</div>
+												</div>
+												{faucetInfo?.user && (
+													<>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-2xl font-bold text-primary">
+																{faucetInfo.user.dailyUsedHbar}
+															</div>
+															<div className="text-xs text-muted-foreground">
+																Your daily used (tinyHBAR)
+															</div>
+														</div>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-2xl font-bold text-primary">
+																{faucetInfo.user.lastSwapTimestamp}
+															</div>
+															<div className="text-xs text-muted-foreground">
+																Your last swap (unix)
+															</div>
+														</div>
+														<div className="bg-card border border-border rounded-md p-4">
+															<div className="text-2xl font-bold text-primary">
+																{faucetInfo.user.totalSwaps}
+															</div>
+															<div className="text-xs text-muted-foreground">
+																Your swaps
+															</div>
+														</div>
+														{typeof faucetInfo.user.bonusFactor !==
+															'undefined' && (
+															<div className="bg-card border border-border rounded-md p-4">
+																<div className="text-2xl font-bold text-primary">
+																	{faucetInfo.user.bonusFactor}
+																</div>
+																<div className="text-xs text-muted-foreground">
+																	Your bonus factor (x100)
+																</div>
+															</div>
+														)}
+														{typeof faucetInfo.user.remainingDaily !==
+															'undefined' && (
+															<div className="bg-card border border-border rounded-md p-4">
+																<div className="text-2xl font-bold text-primary">
+																	{faucetInfo.user.remainingDaily}
+																</div>
+																<div className="text-xs text-muted-foreground">
+																	Your remaining daily (tinyHBAR)
+																</div>
+															</div>
+														)}
+														{typeof faucetInfo.user.isNewDay !==
+															'undefined' && (
+															<div className="bg-card border border-border rounded-md p-4">
+																<div
+																	className={`text-2xl font-bold ${
+																		faucetInfo.user.isNewDay
+																			? 'text-primary'
+																			: 'text-muted-foreground'
+																	}`}
+																>
+																	{faucetInfo.user.isNewDay
+																		? 'New day'
+																		: 'Same day'}
+																</div>
+																<div className="text-xs text-muted-foreground">
+																	Day status
+																</div>
+															</div>
+														)}
+													</>
+												)}
 											</div>
 										</div>
 									)}

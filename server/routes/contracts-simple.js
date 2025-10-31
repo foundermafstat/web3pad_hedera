@@ -142,6 +142,204 @@ router.get('/faucet/rpc/stats', async (_req, res) => {
 });
 
 /**
+ * PlayerSBT RPC endpoints
+ */
+router.get('/player-sbt/rpc/has-sbt/:address', async (req, res) => {
+	try {
+		const hasSBT = await contractService.hasSBTRpc(req.params.address);
+		res.json({ success: true, data: { hasSBT } });
+	} catch (error) {
+		console.error('Error checking hasSBT:', error);
+		res.status(500).json({ success: false, error: 'Failed to check hasSBT' });
+	}
+});
+
+router.get('/player-sbt/rpc/player-stats/:address', async (req, res) => {
+	try {
+		const data = await contractService.getPlayerStatsRpc(req.params.address);
+		res.json({ success: true, data });
+	} catch (error) {
+		console.error('Error fetching player stats:', error);
+		res
+			.status(500)
+			.json({ success: false, error: 'Failed to fetch player stats' });
+	}
+});
+
+router.get('/player-sbt/rpc/game-stats/:address/:gameId', async (req, res) => {
+	try {
+		const { address, gameId } = req.params;
+		const data = await contractService.getGameSpecificStatsRpc(address, gameId);
+		res.json({ success: true, data });
+	} catch (error) {
+		console.error('Error fetching game stats:', error);
+		res
+			.status(500)
+			.json({ success: false, error: 'Failed to fetch game stats' });
+	}
+});
+
+router.get('/player-sbt/rpc/calculate-reward/:score/:gameId', async (req, res) => {
+	try {
+		const { score, gameId } = req.params;
+		const reward = await contractService.calculateRewardRpc(
+			Number(score),
+			gameId
+		);
+		res.json({ success: true, data: { reward } });
+	} catch (error) {
+		console.error('Error calculating reward:', error);
+		res
+			.status(500)
+			.json({ success: false, error: 'Failed to calculate reward' });
+	}
+});
+
+router.get('/player-sbt/rpc/token-id/:address', async (req, res) => {
+	try {
+		const tokenId = await contractService.getPlayerTokenIdRpc(
+			req.params.address
+		);
+		res.json({ success: true, data: { tokenId } });
+	} catch (error) {
+		console.error('Error fetching token ID:', error);
+		res
+			.status(500)
+			.json({ success: false, error: 'Failed to fetch token ID' });
+	}
+});
+
+router.get('/player-sbt/rpc/total', async (_req, res) => {
+	try {
+		const total = await contractService.getTotalSBTsRpc();
+		res.json({ success: true, data: { total } });
+	} catch (error) {
+		console.error('Error fetching total SBTs:', error);
+		res
+			.status(500)
+			.json({ success: false, error: 'Failed to fetch total SBTs' });
+	}
+});
+
+/**
+ * GameRegistry RPC endpoints
+ */
+router.get('/game-registry/rpc/game-module/:gameId', async (req, res) => {
+	try {
+		const { gameId } = req.params;
+		const data = await contractService.getGameModuleRpc(gameId);
+		res.json({ success: true, data });
+	} catch (error) {
+		console.error('Error fetching game module:', error);
+		res
+			.status(500)
+			.json({ success: false, error: 'Failed to fetch game module' });
+	}
+});
+
+router.get('/game-registry/rpc/is-valid-server/:gameId/:server', async (req, res) => {
+	try {
+		const { gameId, server } = req.params;
+		const isValid = await contractService.isValidServerRpc(gameId, server);
+		res.json({ success: true, data: { isValid } });
+	} catch (error) {
+		console.error('Error checking valid server:', error);
+		res
+			.status(500)
+			.json({ success: false, error: 'Failed to check valid server' });
+	}
+});
+
+router.get('/game-registry/rpc/difficulty-multiplier/:gameId', async (req, res) => {
+	try {
+		const { gameId } = req.params;
+		const multiplier = await contractService.getDifficultyMultiplierRpc(gameId);
+		res.json({ success: true, data: { multiplier } });
+	} catch (error) {
+		console.error('Error fetching difficulty multiplier:', error);
+		res
+			.status(500)
+			.json({ success: false, error: 'Failed to fetch difficulty multiplier' });
+	}
+});
+
+router.get('/game-registry/rpc/current-nonce/:gameId', async (req, res) => {
+	try {
+		const { gameId } = req.params;
+		const nonce = await contractService.getCurrentNonceRpc(gameId);
+		res.json({ success: true, data: { nonce } });
+	} catch (error) {
+		console.error('Error fetching current nonce:', error);
+		res
+			.status(500)
+			.json({ success: false, error: 'Failed to fetch current nonce' });
+	}
+});
+
+/**
+ * NFTManager RPC endpoints
+ */
+router.get('/nft-manager/rpc/nft/:tokenId', async (req, res) => {
+	try {
+		const { tokenId } = req.params;
+		const data = await contractService.getNFTRpc(Number(tokenId));
+		res.json({ success: true, data });
+	} catch (error) {
+		console.error('Error fetching NFT:', error);
+		res.status(500).json({ success: false, error: 'Failed to fetch NFT' });
+	}
+});
+
+router.get('/nft-manager/rpc/player-nfts/:address', async (req, res) => {
+	try {
+		const { address } = req.params;
+		const tokenIds = await contractService.getPlayerNFTsRpc(address);
+		res.json({ success: true, data: { tokenIds } });
+	} catch (error) {
+		console.error('Error fetching player NFTs:', error);
+		res
+			.status(500)
+			.json({ success: false, error: 'Failed to fetch player NFTs' });
+	}
+});
+
+router.get('/nft-manager/rpc/player-nft-count/:address', async (req, res) => {
+	try {
+		const { address } = req.params;
+		const count = await contractService.getPlayerNFTCountRpc(address);
+		res.json({ success: true, data: { count } });
+	} catch (error) {
+		console.error('Error fetching player NFT count:', error);
+		res
+			.status(500)
+			.json({ success: false, error: 'Failed to fetch player NFT count' });
+	}
+});
+
+router.get('/nft-manager/rpc/rarity-burn-fee/:rarity', async (req, res) => {
+	try {
+		const { rarity } = req.params;
+		const fee = await contractService.getRarityBurnFeeRpc(rarity);
+		res.json({ success: true, data: { fee } });
+	} catch (error) {
+		console.error('Error fetching rarity burn fee:', error);
+		res
+			.status(500)
+			.json({ success: false, error: 'Failed to fetch rarity burn fee' });
+	}
+});
+
+router.get('/nft-manager/rpc/total', async (_req, res) => {
+	try {
+		const total = await contractService.getTotalNFTsRpc();
+		res.json({ success: true, data: { total } });
+	} catch (error) {
+		console.error('Error fetching total NFTs:', error);
+		res.status(500).json({ success: false, error: 'Failed to fetch total NFTs' });
+	}
+});
+
+/**
  * @route GET /api/contracts/faucet/user/:address
  * @desc Get user swap information
  * @access Public
