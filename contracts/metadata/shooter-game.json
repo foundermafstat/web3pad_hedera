@@ -1,0 +1,164 @@
+{
+	"schema": "w3p.gameModule/1.0",
+	"gameId": "shooter",
+	"version": "1.0.0",
+	"name": {
+		"en": "Battle Arena Shooter"
+	},
+	"description": {
+		"en": "Top-down shooter with three-life elimination, kill tracking, and blockchain-bound stat progression."
+	},
+	"lifecycle": {
+		"maxLives": 3,
+		"eliminationRule": "player reaches three deaths",
+		"resultSubmission": "On elimination the session result is committed on-chain and the player SBT is refreshed with shooter stats."
+	},
+	"tracking": {
+		"metrics": [
+			{
+				"key": "timeSurvivedSeconds",
+				"label": {
+					"en": "Time in match"
+				},
+				"description": {
+					"en": "Total time survived until the player loses the third life."
+				},
+				"aggregation": "session",
+				"unit": "seconds"
+			},
+			{
+				"key": "mobKills",
+				"label": {
+					"en": "Kills"
+				},
+				"description": {
+					"en": "Number of AI-controlled mobs defeated in the session."
+				},
+				"aggregation": "session",
+				"unit": "count"
+			},
+			{
+				"key": "shotsFired",
+				"label": {
+					"en": "Shots fired"
+				},
+				"description": {
+					"en": "Total projectiles fired by the player."
+				},
+				"aggregation": "session",
+				"unit": "count"
+			}
+		]
+	},
+	"nftItems": [
+		{
+			"id": "armor_reactive_vest",
+			"type": "armor",
+			"rarity": "rare",
+			"name": {
+				"en": "Reactive Armor Vest"
+			},
+			"description": {
+				"en": "Reduces all incoming damage by 50%, effectively doubling survivability per life."
+			},
+			"effects": [
+				{
+					"stat": "incomingDamage",
+					"type": "multiplier",
+					"value": 0.5
+				}
+			]
+		},
+		{
+			"id": "weapon_overclocked_carbine",
+			"type": "weapon",
+			"rarity": "epic",
+			"name": {
+				"en": "Overclocked Pulse Carbine"
+			},
+			"description": {
+				"en": "Charges plasma bolts to lethal levels so one hit eliminates a mob instead of the default two."
+			},
+			"effects": [
+				{
+					"stat": "hitsToKill",
+					"type": "override",
+					"value": 1
+				}
+			]
+		}
+	],
+	"achievements": [
+		{
+			"id": "shooter_first_blood",
+			"category": "progression",
+			"name": {
+				"en": "First Blood"
+			},
+			"description": {
+				"en": "Eliminate your first mob in the shooter mode."
+			},
+			"unlockCondition": {
+				"metric": "mobKills",
+				"operator": ">=",
+				"threshold": 1
+			},
+			"rewards": [
+				{
+					"type": "sbtStat",
+					"key": "shooterFirstKillUnlock",
+					"value": true
+				}
+			]
+		}
+	],
+	"sbt": {
+		"token": "PlayerSBT",
+		"updatePolicy": "merge",
+		"trackedStats": [
+			{
+				"key": "totalShooterSessions",
+				"source": "sessionsPlayed",
+				"aggregation": "increment"
+			},
+			{
+				"key": "bestShooterSurvival",
+				"source": "timeSurvivedSeconds",
+				"aggregation": "max"
+			},
+			{
+				"key": "totalShooterKills",
+				"source": "mobKills",
+				"aggregation": "sum"
+			},
+			{
+				"key": "totalShooterShots",
+				"source": "shotsFired",
+				"aggregation": "sum"
+			}
+		]
+	},
+	"result": {
+		"finalization": {
+			"condition": "playerDeaths >= 3",
+			"submitter": "authorizedServer"
+		},
+		"hashing": {
+			"fields": [
+				"player",
+				"gameId",
+				"timeSurvivedSeconds",
+				"mobKills",
+				"shotsFired",
+				"nonce",
+				"timestamp"
+			],
+			"signatureType": "ed25519"
+		}
+	},
+	"assets": {
+		"preview": "ipfs://QmZ4Z6uBrLZ1iBe9KnbqrRzLVj85dpviRopKVJwRoi6ecx",
+		"icon": "ipfs://QmZ4Z6uBrLZ1iBe9KnbqrRzLVj85dpviRopKVJwRoi6ecx",
+		"iconGateway": "https://sexual-blue-tick.myfilebase.com/ipfs/QmZ4Z6uBrLZ1iBe9KnbqrRzLVj85dpviRopKVJwRoi6ecx"
+	}
+}

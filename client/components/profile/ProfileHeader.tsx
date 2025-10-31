@@ -38,7 +38,7 @@ export function ProfileHeader({ user, stats }: ProfileHeaderProps) {
 
 			<div className="px-6 pb-6">
 				{/* Avatar and Basic Info */}
-				<div className="flex flex-col md:flex-row md:items-end gap-6 -mt-16">
+				<div className="flex flex-col md:flex-row md:items-end gap-6 -mt-14">
 					{/* Avatar */}
 					<div className="relative">
 						{user.avatar ? (
@@ -66,14 +66,14 @@ export function ProfileHeader({ user, stats }: ProfileHeaderProps) {
 					{/* Name and Stats */}
 					<div className="flex-1">
 						<h1 className="text-3xl font-bold text-foreground">{user.displayName}</h1>
-						<p className="text-muted-foreground">@{user.username}</p>
+						<p className="text-white">@{user.username}</p>
 						
 						{/* Wallet Connection Badges */}
 						<div className="flex items-center gap-2 mt-2">
 							{user.blockchainConnected && (
-								<div className="flex items-center gap-1 px-2 py-1 bg-purple-500/10 border border-purple-500/30 rounded-full">
-									<FaLayerGroup className="w-3 h-3 text-purple-400" />
-									<span className="text-purple-400 text-xs font-medium">Blockchain</span>
+								<div className="flex items-center gap-1 px-2 py-1 bg-primary/10 border border-primary/30 rounded-full">
+									<FaLayerGroup className="w-3 h-3 text-primary" />
+									<span className="text-primary text-xs font-medium">Hedera</span>
 								</div>
 							)}
 						</div>

@@ -12,6 +12,11 @@ Behind the scenes, Web3Pad integrates Hedera smart contracts for token rewards (
 
 ---
 
+Pitch deck link: https://pitch.com/v/web3pad-pitch-deck-bcp98n
+Track 3: Gaming & NFTs | Quest 1: THG Identity Platform
+
+---
+
 ## Table of Contents
 
 - [Key Features](#key-features)

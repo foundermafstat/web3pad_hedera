@@ -5,6 +5,21 @@ import { authMiddleware, optionalAuthMiddleware, getUserFromRequest } from '../m
 const router = express.Router();
 
 /**
+ * Helper function to normalize Hedera address format
+ * Converts hedera_0_0_XXXXX to 0.0.XXXXX
+ */
+const normalizeHederaAddress = (address) => {
+    if (!address) return address;
+    
+    // If address is in hedera_0_0_XXXXX format, convert to 0.0.XXXXX
+    if (address.startsWith('hedera_')) {
+        return address.replace('hedera_', '').replace(/_/g, '.');
+    }
+    
+    return address;
+};
+
+/**
  * Middleware to validate contract parameters
  */
 const validateContractParams = (req, res, next) => {
@@ -588,6 +603,136 @@ router.post('/player-sbt/mint', optionalAuthMiddleware, async (req, res) => {
     } catch (error) {
         console.error('Error minting Player SBT:', error);
         res.status(500).json({ success: false, error: error.message || 'Failed to mint Player SBT' });
+    }
+});
+
+/**
+ * @route GET /api/contracts/player/:address/sbt-token
+ * @desc Get player SBT token ID and URI
+ * @access Public
+ */
+router.get('/player/:address/sbt-token', async (req, res) => {
+    try {
+        const { address } = req.params;
+        const normalizedAddress = normalizeHederaAddress(address);
+        
+        console.log('[Contracts] Fetching SBT token for:', address, '→', normalizedAddress);
+        
+        // Check if player has SBT
+        const hasSBT = await contractService.hasSBTRpc(normalizedAddress);
+        
+        if (!hasSBT) {
+            return res.json({
+                success: true,
+                data: { hasSBT: false }
+            });
+        }
+        
+        // Get token ID
+        const tokenId = await contractService.getPlayerTokenIdRpc(normalizedAddress);
+        
+        res.json({
+            success: true,
+            data: {
+                hasSBT: true,
+                tokenId
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching player SBT token:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch player SBT token'
+        });
+    }
+});
+
+/**
+ * @route GET /api/contracts/player/:address/nfts
+ * @desc Get all NFTs owned by a player with full details
+ * @access Public
+ */
+router.get('/player/:address/nfts', async (req, res) => {
+    try {
+        const { address } = req.params;
+        const normalizedAddress = normalizeHederaAddress(address);
+        
+        console.log('[Contracts] Fetching NFTs for:', address, '→', normalizedAddress);
+        
+        // Get list of NFT token IDs
+        const nftIds = await contractService.getPlayerNFTsRpc(normalizedAddress);
+        
+        if (!nftIds || nftIds.length === 0) {
+            return res.json({
+                success: true,
+                data: []
+            });
+        }
+        
+        // Get details for each NFT
+        const nfts = await Promise.all(
+            nftIds.map(async (tokenId) => {
+                try {
+                    const nftDetails = await contractService.getNFTRpc(tokenId);
+                    return nftDetails;
+                } catch (error) {
+                    console.error(`Error fetching NFT ${tokenId}:`, error);
+                    return null;
+                }
+            })
+        );
+        
+        // Filter out any failed NFT fetches
+        const validNFTs = nfts.filter(nft => nft !== null);
+        
+        res.json({
+            success: true,
+            data: validNFTs
+        });
+    } catch (error) {
+        console.error('Error fetching player NFTs:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch player NFTs'
+        });
+    }
+});
+
+/**
+ * @route GET /api/contracts/player/:address/blockchain-stats
+ * @desc Get comprehensive player statistics from blockchain
+ * @access Public
+ */
+router.get('/player/:address/blockchain-stats', async (req, res) => {
+    try {
+        const { address } = req.params;
+        const { gameId } = req.query;
+        const normalizedAddress = normalizeHederaAddress(address);
+        
+        console.log('[Contracts] Fetching blockchain stats for:', address, '→', normalizedAddress, 'gameId:', gameId);
+        
+        // Get overall player stats
+        const playerStats = await contractService.getPlayerStatsRpc(normalizedAddress);
+        
+        // Get game-specific stats if gameId provided
+        let gameSpecificStats = null;
+        if (gameId) {
+            gameSpecificStats = await contractService.getGameSpecificStatsRpc(normalizedAddress, gameId);
+        }
+        
+        res.json({
+            success: true,
+            data: {
+                overall: playerStats,
+                gameSpecific: gameSpecificStats
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching blockchain stats:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch blockchain statistics'
+        });
     }
 });
 

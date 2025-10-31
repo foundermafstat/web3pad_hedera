@@ -5,6 +5,20 @@ import { transactionService } from '../lib/transaction-service.js';
 const router = express.Router();
 
 /**
+ * Helper function to normalize Hedera address format
+ * Converts hedera_0_0_XXXXX to 0.0.XXXXX
+ */
+const normalizeHederaAddress = (address) => {
+	if (!address) return address;
+
+	if (address.startsWith('hedera_')) {
+		return address.replace('hedera_', '').replace(/_/g, '.');
+	}
+
+	return address;
+};
+
+/**
  * @route GET /api/contracts/test
  * @desc Test endpoint to check if contracts service is working
  * @access Public
@@ -205,14 +219,136 @@ router.get('/player-sbt/rpc/token-id/:address', async (req, res) => {
 			success: true, 
 			data: { 
 				tokenId,
-				hasSBT: tokenId > 0
-			} 
+				hasSBT: tokenId > 0,
+		},
 		});
 	} catch (error) {
 		console.error('Error fetching token ID:', error);
 		res
 			.status(500)
 			.json({ success: false, error: 'Failed to fetch token ID' });
+	}
+});
+
+/**
+ * Player data endpoints using normalized Hedera addresses
+ */
+router.get('/player/:address/sbt-token', async (req, res) => {
+	try {
+		const { address } = req.params;
+		const normalizedAddress = normalizeHederaAddress(address);
+
+		console.log(
+			'[ContractsSimple] Fetching SBT token for:',
+			address,
+			'→',
+			normalizedAddress
+		);
+
+		const hasSBT = await contractService.hasSBTRpc(normalizedAddress);
+
+		if (!hasSBT) {
+			return res.json({ success: true, data: { hasSBT: false } });
+		}
+
+		const tokenId = await contractService.getPlayerTokenIdRpc(normalizedAddress);
+
+		res.json({
+			success: true,
+			data: {
+				hasSBT: true,
+				tokenId,
+			},
+		});
+	} catch (error) {
+		console.error('Error fetching player SBT token:', error);
+		res
+			.status(500)
+			.json({ success: false, error: 'Failed to fetch player SBT token' });
+	}
+});
+
+router.get('/player/:address/nfts', async (req, res) => {
+	try {
+		const { address } = req.params;
+		const normalizedAddress = normalizeHederaAddress(address);
+
+		console.log(
+			'[ContractsSimple] Fetching NFTs for:',
+			address,
+			'→',
+			normalizedAddress
+		);
+
+		const nftIds = await contractService.getPlayerNFTsRpc(normalizedAddress);
+
+		if (!nftIds || nftIds.length === 0) {
+			return res.json({ success: true, data: [] });
+		}
+
+		const nfts = await Promise.all(
+			nftIds.map(async (tokenId) => {
+				try {
+					const nftDetails = await contractService.getNFTRpc(tokenId);
+					return nftDetails;
+				} catch (error) {
+					console.error(`Error fetching NFT ${tokenId}:`, error);
+					return null;
+				}
+			})
+		);
+
+		const validNFTs = nfts.filter((nft) => nft !== null);
+
+		res.json({ success: true, data: validNFTs });
+	} catch (error) {
+		console.error('Error fetching player NFTs:', error);
+		res
+			.status(500)
+			.json({ success: false, error: 'Failed to fetch player NFTs' });
+	}
+});
+
+router.get('/player/:address/blockchain-stats', async (req, res) => {
+	try {
+		const { address } = req.params;
+		const { gameId } = req.query;
+		const normalizedAddress = normalizeHederaAddress(address);
+
+		console.log(
+			'[ContractsSimple] Fetching blockchain stats for:',
+			address,
+			'→',
+			normalizedAddress,
+			'gameId:',
+			gameId
+		);
+
+		const playerStats = await contractService.getPlayerStatsRpc(normalizedAddress);
+
+		let gameSpecificStats = null;
+		if (gameId) {
+			gameSpecificStats = await contractService.getGameSpecificStatsRpc(
+				normalizedAddress,
+				gameId
+			);
+		}
+
+		res.json({
+			success: true,
+			data: {
+				overall: playerStats,
+				gameSpecific: gameSpecificStats,
+			},
+		});
+	} catch (error) {
+		console.error('Error fetching blockchain stats:', error);
+		res
+			.status(500)
+			.json({
+				success: false,
+				error: 'Failed to fetch blockchain statistics',
+			});
 	}
 });
 
@@ -280,6 +416,19 @@ router.get('/game-registry/rpc/current-nonce/:gameId', async (req, res) => {
 		res
 			.status(500)
 			.json({ success: false, error: 'Failed to fetch current nonce' });
+	}
+});
+
+router.get('/game-registry/rpc/registration/:gameId', async (req, res) => {
+	try {
+		const { gameId } = req.params;
+		const data = await contractService.getLatestGameRegistrationTx(gameId);
+		res.json({ success: true, data });
+	} catch (error) {
+		console.error('Error fetching registration transaction:', error);
+		res
+			.status(500)
+			.json({ success: false, error: 'Failed to fetch registration transaction' });
 	}
 });
 

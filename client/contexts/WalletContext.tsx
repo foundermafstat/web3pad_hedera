@@ -20,6 +20,7 @@ interface WalletContextType extends WalletState {
   disconnectWallet: () => Promise<void>;
   signTransaction: (transactionBytes: Uint8Array, accountId: string) => Promise<any>;
   refreshWalletState: () => Promise<void>;
+  signMessage: (message: string) => Promise<{ signatureMap: any; message: string }>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -189,6 +190,26 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     throw new Error('WalletConnect session not available. Please reconnect wallet.');
   }, [walletState]);
 
+  const signMessage = useCallback(async (message: string) => {
+    const network = walletState.network || 'testnet';
+    await hederaService.init(network);
+
+    if (!hederaService.hasActiveSession()) {
+      throw new Error('Wallet session is not active. Please reconnect.');
+    }
+
+    const address = walletState.walletAddress || hederaService.getCurrentWalletAddress();
+    if (!address) {
+      throw new Error('Wallet is not connected');
+    }
+
+    const result = await hederaService.signMessagePayload(message, address);
+    return {
+      signatureMap: result.signatureMap,
+      message: result.message,
+    };
+  }, [walletState]);
+
   const refreshWalletState = useCallback(async () => {
     const walletData = authenticatedWalletUtils.getWalletFromSession(session);
     
@@ -228,6 +249,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         disconnectWallet,
         signTransaction,
         refreshWalletState,
+        signMessage,
       }}
     >
       {children}

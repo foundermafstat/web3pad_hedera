@@ -485,6 +485,17 @@ io.on('connection', (socket) => {
 		}
 	});
 
+	socket.on('shooter:resultSignature', (payload = {}) => {
+		try {
+			roomManager.handlePlayerResultSignature(socket.id, {
+				...payload,
+				receivedAt: Date.now(),
+			});
+		} catch (error) {
+			console.error('Error handling shooter result signature:', error);
+		}
+	});
+
 	// Отключение
 	socket.on('disconnect', () => {
 		try {

@@ -88,9 +88,14 @@ const CONTRACT_ABIS = {
 		'function getTimeUntilNextDraw() view returns (uint256)',
 	],
 	FaucetManager: [
-		'function getUserInfo(address user) view returns (tuple(uint256 totalSwappedToday, uint256 lastSwapTimestamp, uint256 swapsCount))',
-		'function getSwapRate() view returns (tuple(uint256 hbarToHplayRate, uint256 dailyLimitHbar, bool enabled))',
+		'function getSwapRate() view returns (uint256 hbarToHplayRate, uint256 dailyLimitHbar, bool enabled)',
+		'function rate() view returns (uint256 hbarToHplayRate, uint256 dailyLimitHbar, bool enabled)',
+		'function getUserInfo(address user) view returns (uint256 totalSwappedToday, uint256 lastSwapTimestamp, uint256 swapsCount)',
+		'function userSwaps(address user) view returns (uint256 totalSwappedToday, uint256 lastSwapTimestamp, uint256 swapsCount)',
 		'function getRemainingLimit(address user) view returns (uint256)',
+		'function isNewDay(uint256 lastTimestamp) view returns (bool)',
+		'function totalHbarDeposited() view returns (uint256)',
+		'function totalHplayMinted() view returns (uint256)',
 		'function swapHBARforHPLAY() payable returns (uint256)',
 	],
 	HederaGameLaunchpad: [

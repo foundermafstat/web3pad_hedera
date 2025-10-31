@@ -280,6 +280,53 @@ export class HederaService {
       return null;
     }
   }
+
+  /**
+   * Sign arbitrary message payload (for game results, etc.)
+   */
+  async signMessagePayload(message: string, address: string) {
+    if (!message) {
+      throw new Error('Message is required for signing');
+    }
+
+    if (!address) {
+      throw new Error('Wallet address is required for signing');
+    }
+
+    if (!this.dAppConnector) {
+      throw new Error('DAppConnector not initialized');
+    }
+
+    if (!this.hasActiveSession()) {
+      throw new Error('No active wallet session');
+    }
+
+    const networkPrefix = this.currentNetwork === 'mainnet' ? 'mainnet' : 'testnet';
+    const fullAddress = address.startsWith('hedera:')
+      ? address
+      : `hedera:${networkPrefix}:${address}`;
+
+    const signResult = await this.dAppConnector.signMessage({
+      signerAccountId: fullAddress,
+      message,
+    });
+
+    const signatureMap =
+      signResult?.result?.signatureMap ||
+      signResult?.signatureMap ||
+      signResult?.result?.signature ||
+      signResult?.signature;
+
+    if (!signatureMap) {
+      throw new Error('Wallet did not return a signature');
+    }
+
+    return {
+      signatureMap,
+      message,
+      rawResult: signResult,
+    };
+  }
   
   /**
    * Disconnect from wallet

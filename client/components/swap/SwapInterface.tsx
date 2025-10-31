@@ -27,6 +27,11 @@ interface UserSwapInfo {
 	totalSwaps: number;
 }
 
+interface SuccessState {
+	message: string;
+	transactionId?: string;
+}
+
 export function SwapInterface() {
 	const { data: session, status } = useSession();
 	const wallet = useWallet();
@@ -36,7 +41,7 @@ export function SwapInterface() {
 	const [userSwapInfo, setUserSwapInfo] = useState<UserSwapInfo | null>(null);
 	const [isSwapping, setIsSwapping] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [success, setSuccess] = useState<string | null>(null);
+	const [success, setSuccess] = useState<SuccessState | null>(null);
 	const [hbarBalance, setHbarBalance] = useState<number>(0);
 	const [hplayBalance, setHplayBalance] = useState<number>(0);
 	const [isConnecting, setIsConnecting] = useState(false);
@@ -104,7 +109,10 @@ export function SwapInterface() {
 
 	const loadHplayBalance = async (address: string) => {
 		try {
-			console.log('[SwapInterface] Loading HPLAY balance for address:', address);
+			console.log(
+				'[SwapInterface] Loading HPLAY balance for address:',
+				address
+			);
 			const balance = await hederaClient.getTokenBalance(address);
 			console.log('[SwapInterface] HPLAY balance received:', balance);
 			setHplayBalance(balance);
@@ -126,7 +134,7 @@ export function SwapInterface() {
 			});
 
 			if (result?.ok) {
-				setSuccess('Wallet connected successfully');
+				setSuccess({ message: 'Wallet connected successfully' });
 			} else {
 				setError(result?.error || 'Failed to connect wallet');
 			}
@@ -184,9 +192,10 @@ export function SwapInterface() {
 
 			const walletTypeUsed =
 				(swapResult as any).walletType || wallet.walletType || 'wallet';
-			setSuccess(
-				`✅ Successfully swapped ${hbarAmount} HBAR for ${swapResult.hplayAmount} HPLAY! Tx: ${swapResult.transactionId} (real transaction via ${walletTypeUsed})`
-			);
+			setSuccess({
+				message: `✅ Successfully swapped ${hbarAmount} HBAR for ${swapResult.hplayAmount} HPLAY! Tx: ${swapResult.transactionId} (real transaction via ${walletTypeUsed})`,
+				transactionId: swapResult.transactionId,
+			});
 			setHbarAmount('');
 			setHplayAmount('');
 
@@ -719,164 +728,174 @@ export function SwapInterface() {
 	return (
 		<div className="max-w-2xl mx-auto">
 			{/* Main Swap Card */}
-			<Card className="bg-white/10 backdrop-blur-sm border-white/20">
+			<Card className="bg-gray-800/50 border-gray-700 backdrop-blur-lg hover:bg-gray-800/70">
 				<CardHeader>
 					<CardTitle className="text-white text-2xl flex items-center gap-2">
 						<ArrowUpDown className="h-6 w-6" />
 						Token Swap
 					</CardTitle>
 				</CardHeader>
-					<CardContent className="space-y-6">
-						{/* Wallet Connection */}
-						{status === 'loading' ? (
-							<div className="text-center py-8">
-								<Loader2 className="h-16 w-16 text-gray-400 mx-auto mb-4 animate-spin" />
-								<h3 className="text-xl font-semibold text-white mb-2">
-									Loading...
-								</h3>
+				<CardContent className="space-y-6">
+					{/* Wallet Connection */}
+					{status === 'loading' ? (
+						<div className="text-center py-8">
+							<Loader2 className="h-16 w-16 text-gray-400 mx-auto mb-4 animate-spin" />
+							<h3 className="text-xl font-semibold text-white mb-2">
+								Loading...
+							</h3>
+						</div>
+					) : !session?.user ? (
+						<div className="text-center py-8">
+							<Wallet className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+							<h3 className="text-xl font-semibold text-white mb-2">
+								Connect your wallet
+							</h3>
+							<p className="text-gray-300 mb-6">
+								To swap tokens, please sign in using a Hedera wallet
+							</p>
+							<Button
+								onClick={connectWallet}
+								disabled={isConnecting}
+								className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+							>
+								{isConnecting ? (
+									<>
+										<Loader2 className="h-4 w-4 mr-2 animate-spin" />
+										Connecting...
+									</>
+								) : (
+									<>
+										<Wallet className="h-4 w-4 mr-2" />
+										Connect Wallet
+									</>
+								)}
+							</Button>
+						</div>
+					) : (
+						<div className="space-y-4">
+							{/* Token Balances - Single Row */}
+							<div className="grid grid-cols-2 gap-4">
+								{/* HBAR Balance */}
+								<div className="bg-blue-500/20 border border-blue-500/30 rounded-lg p-3">
+									<div className="text-xs text-blue-400 mb-1">HBAR</div>
+									<div className="text-white font-bold text-lg">
+										{hbarBalance.toFixed(2)}
+									</div>
+								</div>
+
+								{/* HPLAY Balance */}
+								<div className="bg-purple-500/20 border border-purple-500/30 rounded-lg p-3">
+									<div className="text-xs text-purple-400 mb-1">HPLAY</div>
+									<div className="text-white font-bold text-lg">
+										{hplayBalance.toFixed(2)}
+									</div>
+								</div>
 							</div>
-						) : !session?.user ? (
-							<div className="text-center py-8">
-								<Wallet className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-								<h3 className="text-xl font-semibold text-white mb-2">
-									Connect your wallet
-								</h3>
-								<p className="text-gray-300 mb-6">
-									To swap tokens, please sign in using a Hedera wallet
-								</p>
+
+							{/* Swap Form */}
+							<div className="space-y-4">
+								<div>
+									<div className="flex items-center justify-between">
+										<Label htmlFor="hbar-amount" className="text-white">
+											Amount to swap (HBAR)
+										</Label>
+										<Button
+											type="button"
+											variant="ghost"
+											onClick={handleUseMax}
+											disabled={isSwapping}
+											className="h-7 px-2 text-xs text-gray-300 hover:text-white"
+										>
+											MAX
+										</Button>
+									</div>
+									<Input
+										id="hbar-amount"
+										type="number"
+										value={hbarAmount}
+										onChange={(e) => setHbarAmount(e.target.value)}
+										placeholder="0.00"
+										className="bg-white/10 border-white/20 text-white placeholder:text-gray-400"
+										disabled={isSwapping}
+									/>
+								</div>
+
+								<div className="flex justify-center">
+									<ArrowUpDown className="h-6 w-6 text-gray-400" />
+								</div>
+
+								<div>
+									<Label htmlFor="hplay-amount" className="text-white">
+										You receive (HPLAY)
+									</Label>
+									<Input
+										id="hplay-amount"
+										type="text"
+										value={hplayAmount}
+										readOnly
+										className="bg-white/10 border-white/20 text-white"
+									/>
+								</div>
+
+								{/* Swap Rate Info - Simplified */}
+								{swapRate && (
+									<div className="bg-gray-500/20 border border-gray-500/30 rounded-lg p-3">
+										<div className="flex items-center justify-between text-sm">
+											<span className="text-gray-300">Rate:</span>
+											<span className="text-white font-medium">
+												1 HBAR = {swapRate.hbarToHplayRate.toFixed(2)} HPLAY
+											</span>
+										</div>
+									</div>
+								)}
+
 								<Button
-									onClick={connectWallet}
-									disabled={isConnecting}
-									className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+									onClick={handleSwap}
+									disabled={
+										!hbarAmount || isSwapping || !swapRate?.faucetEnabled
+									}
+									className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
 								>
-									{isConnecting ? (
+									{isSwapping ? (
 										<>
 											<Loader2 className="h-4 w-4 mr-2 animate-spin" />
-											Connecting...
+											Swapping...
 										</>
 									) : (
-										<>
-											<Wallet className="h-4 w-4 mr-2" />
-											Connect Wallet
-										</>
+										'Swap Tokens'
 									)}
 								</Button>
 							</div>
-						) : (
-							<div className="space-y-4">
-								{/* Token Balances - Single Row */}
-								<div className="grid grid-cols-2 gap-4">
-									{/* HBAR Balance */}
-									<div className="bg-blue-500/20 border border-blue-500/30 rounded-lg p-3">
-										<div className="text-xs text-blue-400 mb-1">HBAR</div>
-										<div className="text-white font-bold text-lg">
-											{hbarBalance.toFixed(2)}
-										</div>
-									</div>
+						</div>
+					)}
 
-									{/* HPLAY Balance */}
-									<div className="bg-purple-500/20 border border-purple-500/30 rounded-lg p-3">
-										<div className="text-xs text-purple-400 mb-1">HPLAY</div>
-										<div className="text-white font-bold text-lg">
-											{hplayBalance.toFixed(2)}
-										</div>
-									</div>
-								</div>
+					{/* Error/Success Messages */}
+					{error && (
+						<Alert className="bg-red-500/20 border-red-500/30">
+							<AlertDescription className="text-red-400">
+								{error}
+							</AlertDescription>
+						</Alert>
+					)}
 
-								{/* Swap Form */}
-								<div className="space-y-4">
-									<div>
-										<div className="flex items-center justify-between">
-											<Label htmlFor="hbar-amount" className="text-white">
-												Amount to swap (HBAR)
-											</Label>
-											<Button
-												type="button"
-												variant="ghost"
-												onClick={handleUseMax}
-												disabled={isSwapping}
-												className="h-7 px-2 text-xs text-gray-300 hover:text-white"
-											>
-												MAX
-											</Button>
-										</div>
-										<Input
-											id="hbar-amount"
-											type="number"
-											value={hbarAmount}
-											onChange={(e) => setHbarAmount(e.target.value)}
-											placeholder="0.00"
-											className="bg-white/10 border-white/20 text-white placeholder:text-gray-400"
-											disabled={isSwapping}
-										/>
-									</div>
-
-									<div className="flex justify-center">
-										<ArrowUpDown className="h-6 w-6 text-gray-400" />
-									</div>
-
-									<div>
-										<Label htmlFor="hplay-amount" className="text-white">
-											You receive (HPLAY)
-										</Label>
-										<Input
-											id="hplay-amount"
-											type="text"
-											value={hplayAmount}
-											readOnly
-											className="bg-white/10 border-white/20 text-white"
-										/>
-									</div>
-
-									{/* Swap Rate Info - Simplified */}
-									{swapRate && (
-										<div className="bg-gray-500/20 border border-gray-500/30 rounded-lg p-3">
-											<div className="flex items-center justify-between text-sm">
-												<span className="text-gray-300">Rate:</span>
-												<span className="text-white font-medium">
-													1 HBAR = {swapRate.hbarToHplayRate.toFixed(2)} HPLAY
-												</span>
-											</div>
-										</div>
-									)}
-
-									<Button
-										onClick={handleSwap}
-										disabled={
-											!hbarAmount || isSwapping || !swapRate?.faucetEnabled
-										}
-										className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+					{success && (
+						<Alert className="bg-green-500/20 border-green-500/30">
+							<AlertDescription className="text-green-400 space-y-2">
+								<div>{success.message}</div>
+								{success.transactionId && (
+									<a
+										href={`https://hashscan.io/testnet/transaction/${success.transactionId}`}
+										target="_blank"
+										rel="noopener noreferrer"
+										className="underline"
 									>
-										{isSwapping ? (
-											<>
-												<Loader2 className="h-4 w-4 mr-2 animate-spin" />
-												Swapping...
-											</>
-										) : (
-											'Swap Tokens'
-										)}
-									</Button>
-								</div>
-							</div>
-						)}
-
-						{/* Error/Success Messages */}
-						{error && (
-							<Alert className="bg-red-500/20 border-red-500/30">
-								<AlertDescription className="text-red-400">
-									{error}
-								</AlertDescription>
-							</Alert>
-						)}
-
-						{success && (
-							<Alert className="bg-green-500/20 border-green-500/30">
-								<AlertDescription className="text-green-400">
-									{success}
-								</AlertDescription>
-							</Alert>
-						)}
-					</CardContent>
+										Open Transaction in HashScan
+									</a>
+								)}
+							</AlertDescription>
+						</Alert>
+					)}
+				</CardContent>
 			</Card>
 		</div>
 	);

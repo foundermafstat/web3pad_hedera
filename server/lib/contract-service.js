@@ -3,6 +3,10 @@ import { initializeHederaClient, getContractConfig, getContractEvmAddress, HEDER
 import { ethers } from 'ethers';
 import { transactionService } from './transaction-service.js';
 
+const REGISTER_GAME_MODULE_SELECTOR = ethers
+    .id('registerGameModule(address,bytes32,string,string)')
+    .slice(0, 10);
+
 /**
  * Contract interaction service for reading data from Hedera smart contracts
  */
@@ -382,8 +386,20 @@ export class ContractService {
      * @returns {Promise<number>} Pool balance
      */
     async getLotteryPoolBalance() {
-        const result = await this.callContractFunction('LotteryPool', 'getPoolBalance');
-        return result.getUint256(0).toNumber();
+        try {
+            const result = await this.callContractFunction('LotteryPool', 'getPoolBalance');
+            return this.toSafeNumber(result.getUint256(0));
+        } catch (error) {
+            if (this.shouldFallbackToRpc(error)) {
+                try {
+                    return await this.getLotteryPoolBalanceRpc();
+                } catch (rpcError) {
+                    console.error('Error fetching lottery pool balance via JSON-RPC:', rpcError);
+                }
+            }
+            console.error('Error fetching lottery pool balance via Hedera SDK:', error);
+            return 0;
+        }
     }
 
     /**
@@ -391,8 +407,20 @@ export class ContractService {
      * @returns {Promise<number>} Total participants
      */
     async getTotalParticipants() {
-        const result = await this.callContractFunction('LotteryPool', 'getTotalParticipants');
-        return result.getUint256(0).toNumber();
+        try {
+            const result = await this.callContractFunction('LotteryPool', 'getTotalParticipants');
+            return this.toSafeNumber(result.getUint256(0));
+        } catch (error) {
+            if (this.shouldFallbackToRpc(error)) {
+                try {
+                    return await this.getTotalParticipantsRpc();
+                } catch (rpcError) {
+                    console.error('Error fetching total participants via JSON-RPC:', rpcError);
+                }
+            }
+            console.error('Error fetching total participants via Hedera SDK:', error);
+            return 0;
+        }
     }
 
     /**
@@ -400,8 +428,20 @@ export class ContractService {
      * @returns {Promise<number>} Unix timestamp (seconds)
      */
     async getLastDrawTimestamp() {
-        const result = await this.callContractFunction('LotteryPool', 'getLastDrawTimestamp');
-        return result.getUint256(0).toNumber();
+        try {
+            const result = await this.callContractFunction('LotteryPool', 'getLastDrawTimestamp');
+            return this.toSafeNumber(result.getUint256(0));
+        } catch (error) {
+            if (this.shouldFallbackToRpc(error)) {
+                try {
+                    return await this.getLastDrawTimestampRpc();
+                } catch (rpcError) {
+                    console.error('Error fetching last draw timestamp via JSON-RPC:', rpcError);
+                }
+            }
+            console.error('Error fetching last draw timestamp via Hedera SDK:', error);
+            return 0;
+        }
     }
 
     /**
@@ -409,8 +449,20 @@ export class ContractService {
      * @returns {Promise<number>} Interval seconds
      */
     async getDrawInterval() {
-        const result = await this.callContractFunction('LotteryPool', 'getDrawInterval');
-        return result.getUint256(0).toNumber();
+        try {
+            const result = await this.callContractFunction('LotteryPool', 'getDrawInterval');
+            return this.toSafeNumber(result.getUint256(0));
+        } catch (error) {
+            if (this.shouldFallbackToRpc(error)) {
+                try {
+                    return await this.getDrawIntervalRpc();
+                } catch (rpcError) {
+                    console.error('Error fetching draw interval via JSON-RPC:', rpcError);
+                }
+            }
+            console.error('Error fetching draw interval via Hedera SDK:', error);
+            return 0;
+        }
     }
 
     /**
@@ -419,10 +471,22 @@ export class ContractService {
      * @returns {Promise<boolean>} is participant
      */
     async isLotteryParticipant(userAddress) {
-        const result = await this.callContractFunction('LotteryPool', 'isParticipant', [
-            new ContractFunctionParameters().addAddress(this.validateAddress(userAddress))
-        ]);
-        return result.getBool(0);
+        try {
+            const result = await this.callContractFunction('LotteryPool', 'isParticipant', [
+                new ContractFunctionParameters().addAddress(this.validateAddress(userAddress))
+            ]);
+            return result.getBool(0);
+        } catch (error) {
+            if (this.shouldFallbackToRpc(error)) {
+                try {
+                    return await this.isLotteryParticipantRpc(userAddress);
+                } catch (rpcError) {
+                    console.error('Error checking lottery participant via JSON-RPC:', rpcError);
+                }
+            }
+            console.error('Error checking lottery participant via Hedera SDK:', error);
+            return false;
+        }
     }
 
     /**
@@ -431,10 +495,22 @@ export class ContractService {
      * @returns {Promise<number>} count
      */
     async getParticipantTransactionCount(userAddress) {
-        const result = await this.callContractFunction('LotteryPool', 'getParticipantTransactionCount', [
-            new ContractFunctionParameters().addAddress(this.validateAddress(userAddress))
-        ]);
-        return result.getUint256(0).toNumber();
+        try {
+            const result = await this.callContractFunction('LotteryPool', 'getParticipantTransactionCount', [
+                new ContractFunctionParameters().addAddress(this.validateAddress(userAddress))
+            ]);
+            return this.toSafeNumber(result.getUint256(0));
+        } catch (error) {
+            if (this.shouldFallbackToRpc(error)) {
+                try {
+                    return await this.getParticipantTransactionCountRpc(userAddress);
+                } catch (rpcError) {
+                    console.error('Error fetching participant transaction count via JSON-RPC:', rpcError);
+                }
+            }
+            console.error('Error fetching participant transaction count via Hedera SDK:', error);
+            return 0;
+        }
     }
 
     /**
@@ -443,10 +519,22 @@ export class ContractService {
      * @returns {Promise<number>} volume
      */
     async getParticipantVolume(userAddress) {
-        const result = await this.callContractFunction('LotteryPool', 'getParticipantVolume', [
-            new ContractFunctionParameters().addAddress(this.validateAddress(userAddress))
-        ]);
-        return result.getUint256(0).toNumber();
+        try {
+            const result = await this.callContractFunction('LotteryPool', 'getParticipantVolume', [
+                new ContractFunctionParameters().addAddress(this.validateAddress(userAddress))
+            ]);
+            return this.toSafeNumber(result.getUint256(0));
+        } catch (error) {
+            if (this.shouldFallbackToRpc(error)) {
+                try {
+                    return await this.getParticipantVolumeRpc(userAddress);
+                } catch (rpcError) {
+                    console.error('Error fetching participant volume via JSON-RPC:', rpcError);
+                }
+            }
+            console.error('Error fetching participant volume via Hedera SDK:', error);
+            return 0;
+        }
     }
 
     /**
@@ -470,37 +558,89 @@ export class ContractService {
         }
     }
 
+    async getLotteryPoolBalanceRpc() {
+        const contract = this.getEthersContract('LotteryPool');
+        const value = await contract.getPoolBalance();
+        return this.toSafeNumber(value);
+    }
+
+    async getTotalParticipantsRpc() {
+        const contract = this.getEthersContract('LotteryPool');
+        const value = await contract.getTotalParticipants();
+        return this.toSafeNumber(value);
+    }
+
+    async getLastDrawTimestampRpc() {
+        const contract = this.getEthersContract('LotteryPool');
+        const value = await contract.getLastDrawTimestamp();
+        return this.toSafeNumber(value);
+    }
+
+    async getDrawIntervalRpc() {
+        const contract = this.getEthersContract('LotteryPool');
+        const value = await contract.getDrawInterval();
+        return this.toSafeNumber(value);
+    }
+
+    async isLotteryParticipantRpc(userAddress) {
+        const contract = this.getEthersContract('LotteryPool');
+        const addr = this.validateAddress(userAddress);
+        const value = await contract.isParticipant(addr);
+        return Boolean(value);
+    }
+
+    async getParticipantTransactionCountRpc(userAddress) {
+        const contract = this.getEthersContract('LotteryPool');
+        const addr = this.validateAddress(userAddress);
+        const value = await contract.getParticipantTransactionCount(addr);
+        return this.toSafeNumber(value);
+    }
+
+    async getParticipantVolumeRpc(userAddress) {
+        const contract = this.getEthersContract('LotteryPool');
+        const addr = this.validateAddress(userAddress);
+        const value = await contract.getParticipantVolume(addr);
+        return this.toSafeNumber(value);
+    }
+
+    async getTimeUntilNextDrawRpc() {
+        const contract = this.getEthersContract('LotteryPool');
+        const value = await contract.getTimeUntilNextDraw();
+        return this.toSafeNumber(value);
+    }
+
     /** FaucetManager via JSON-RPC **/
     async getSwapRateRpc() {
-        const contract = this.getEthersContract('FaucetManager');
-        const r = await contract.getSwapRate();
-        // tuple(uint256,uint256,uint256,uint256,bool)
-        return {
-            hbarToHplayRate: Number(r[0]),
-            bonusMultiplierMin: Number(r[1]),
-            bonusMultiplierMax: Number(r[2]),
-            dailyLimitHbar: Number(r[3]),
-            faucetEnabled: Boolean(r[4])
-        };
+        try {
+            const contract = this.getEthersContract('FaucetManager');
+            const raw = await contract.getSwapRate();
+            return this.formatSwapRateFromRpc(raw);
+        } catch (error) {
+            console.error('Error fetching swap rate via JSON-RPC:', error);
+            return this.defaultSwapRate();
+        }
     }
 
     async getUserSwapInfoRpc(userAddress) {
-        const contract = this.getEthersContract('FaucetManager');
-        const addr = this.validateAddress(userAddress);
-        const r = await contract.getUserSwapInfo(addr);
-        // tuple(uint256 totalSwappedToday, uint256 lastSwapTimestamp, uint256 swapsCount)
-        return {
-            dailyUsedHbar: Number(r[0]),
-            lastSwapTimestamp: Number(r[1]),
-            totalSwaps: Number(r[2])
-        };
+        try {
+            const contract = this.getEthersContract('FaucetManager');
+            const addr = this.validateAddress(userAddress);
+            const raw = await contract.getUserInfo(addr);
+            return this.formatUserSwapInfoFromRpc(raw);
+        } catch (error) {
+            console.error('Error fetching user swap info via JSON-RPC:', error);
+            return {
+                dailyUsedHbar: 0,
+                lastSwapTimestamp: 0,
+                totalSwaps: 0
+            };
+        }
     }
 
     async calculateBonusFactorRpc(userAddress) {
-        const contract = this.getEthersContract('FaucetManager');
-        const addr = this.validateAddress(userAddress);
-        const v = await contract.calculateBonusFactor(addr);
-        return Number(v);
+        // FaucetManager V2 removed bonus mechanics; return neutral factor (1.0x represented as 100)
+        this.validateAddress(userAddress);
+        return 100;
     }
 
     async isNewDayRpc(lastSwapTimestamp) {
@@ -577,22 +717,40 @@ export class ContractService {
     }
 
     async getRemainingDailyLimitRpc(userAddress) {
-        const contract = this.getEthersContract('FaucetManager');
-        const addr = this.validateAddress(userAddress);
-        const v = await contract.getRemainingDailyLimit(addr);
-        return Number(v);
+        try {
+            const contract = this.getEthersContract('FaucetManager');
+            const addr = this.validateAddress(userAddress);
+            const raw = await contract.getRemainingLimit(addr);
+            return this.toSafeNumber(raw);
+        } catch (error) {
+            console.error('Error fetching remaining daily limit via JSON-RPC:', error);
+            return 0;
+        }
     }
 
     async getFaucetStatsRpc() {
-        const contract = this.getEthersContract('FaucetManager');
-        const r = await contract.getFaucetStats();
-        // assume (uint256 totalDistributed, uint256 totalUsers, uint256 totalSwaps, uint256 totalHbar)
-        return {
-            totalDistributed: Number(r[0] || 0),
-            totalUsers: Number(r[1] || 0),
-            totalSwaps: Number(r[2] || 0),
-            totalHbar: Number(r[3] || 0)
-        };
+        try {
+            const contract = this.getEthersContract('FaucetManager');
+            const [totalHbarDeposited, totalHplayMinted] = await Promise.all([
+                contract.totalHbarDeposited(),
+                contract.totalHplayMinted()
+            ]);
+
+            return {
+                totalDistributed: this.toSafeNumber(totalHplayMinted) / 10 ** 8,
+                totalUsers: undefined,
+                totalSwaps: undefined,
+                totalHbar: this.toSafeNumber(totalHbarDeposited)
+            };
+        } catch (error) {
+            console.error('Error fetching faucet stats via JSON-RPC:', error);
+            return {
+                totalDistributed: 0,
+                totalUsers: undefined,
+                totalSwaps: undefined,
+                totalHbar: 0
+            };
+        }
     }
 
     /**
@@ -680,6 +838,67 @@ export class ContractService {
         };
     }
 
+    async getLatestGameRegistrationTx(gameId) {
+        try {
+            const mirrorNodeUrl = HEDERA_CONFIG.mirrorNodeUrl;
+            const { contractId } = getContractConfig('GameRegistry');
+            const url = `${mirrorNodeUrl}/api/v1/contracts/${contractId}/results?limit=25&order=desc`;
+            const response = await fetch(url);
+
+            if (!response.ok) {
+                throw new Error(`Mirror node responded with ${response.status}`);
+            }
+
+            const payload = await response.json();
+            const results = Array.isArray(payload?.results) ? payload.results : [];
+            const abiCoder = ethers.AbiCoder.defaultAbiCoder();
+
+            for (const result of results) {
+                const fnParamsRaw = result?.function_parameters;
+                if (typeof fnParamsRaw !== 'string') {
+                    continue;
+                }
+
+                const normalized = fnParamsRaw.startsWith('0x')
+                    ? fnParamsRaw.toLowerCase()
+                    : `0x${fnParamsRaw.toLowerCase()}`;
+
+                if (!normalized.startsWith(REGISTER_GAME_MODULE_SELECTOR)) {
+                    continue;
+                }
+
+                const encodedArgs = `0x${normalized.slice(10)}`;
+
+                try {
+                    const decoded = abiCoder.decode(
+                        ['address', 'bytes32', 'string', 'string'],
+                        encodedArgs
+                    );
+                    const decodedGameId = decoded[2];
+
+                    if (decodedGameId !== gameId) {
+                        continue;
+                    }
+
+                    return {
+                        transactionId: result?.transaction_id || null,
+                        transactionHash: result?.hash || null,
+                        consensusTimestamp: result?.timestamp || null,
+                        metadataUri: decoded[3] || null,
+                        serverAddress: decoded[0] || null
+                    };
+                } catch (decodeError) {
+                    console.warn('[GameRegistry] Failed to decode function parameters', decodeError);
+                }
+            }
+
+            return null;
+        } catch (error) {
+            console.error('Error fetching latest game registration transaction:', error);
+            return null;
+        }
+    }
+
     async isValidServerRpc(gameId, serverAddress) {
         const contract = this.getEthersContract('GameRegistry');
         const addr = this.validateAddress(serverAddress);
@@ -748,8 +967,20 @@ export class ContractService {
      * @returns {Promise<number>} Time in seconds
      */
     async getTimeUntilNextDraw() {
-        const result = await this.callContractFunction('LotteryPool', 'getTimeUntilNextDraw');
-        return result.getUint256(0).toNumber();
+        try {
+            const result = await this.callContractFunction('LotteryPool', 'getTimeUntilNextDraw');
+            return this.toSafeNumber(result.getUint256(0));
+        } catch (error) {
+            if (this.shouldFallbackToRpc(error)) {
+                try {
+                    return await this.getTimeUntilNextDrawRpc();
+                } catch (rpcError) {
+                    console.error('Error fetching time until next draw via JSON-RPC:', rpcError);
+                }
+            }
+            console.error('Error fetching time until next draw via Hedera SDK:', error);
+            return 0;
+        }
     }
 
     /**
@@ -759,23 +990,17 @@ export class ContractService {
     async getSwapRate() {
         try {
             const result = await this.callContractFunction('FaucetManager', 'getSwapRate');
-            
-            return {
-                hbarToHplayRate: result.getUint256(0).toNumber(),
-                bonusMultiplierMin: result.getUint256(1).toNumber(),
-                bonusMultiplierMax: result.getUint256(2).toNumber(),
-                dailyLimitHbar: result.getUint256(3).toNumber(),
-                faucetEnabled: result.getBool(4)
-            };
+            return this.formatSwapRateFromSdk(result);
         } catch (error) {
-            // Return default values if contract call fails
-            return {
-                hbarToHplayRate: 500,          // 1 HBAR = 500 HPLAY (without extra decimals)
-                bonusMultiplierMin: 100,       // 1.0x
-                bonusMultiplierMax: 150,       // 1.5x
-                dailyLimitHbar: 1000 * 10**8,  // 1000 HBAR per user per day
-                faucetEnabled: true
-            };
+            if (this.shouldFallbackToRpc(error)) {
+                try {
+                    return await this.getSwapRateRpc();
+                } catch (rpcError) {
+                    console.error('Error fetching swap rate via JSON-RPC:', rpcError);
+                }
+            }
+            console.error('Error fetching swap rate via Hedera SDK:', error);
+            return this.defaultSwapRate();
         }
     }
 
@@ -818,17 +1043,18 @@ export class ContractService {
     async getUserSwapInfo(userAddress) {
         try {
             const ethereumAddress = this.validateAddress(userAddress);
-            const result = await this.callContractFunction('FaucetManager', 'getUserSwapInfo', [
+            const result = await this.callContractFunction('FaucetManager', 'getUserInfo', [
                 new ContractFunctionParameters().addAddress(ethereumAddress)
             ]);
-            
-            return {
-                dailyUsedHbar: result.getUint256(0).toNumber(),
-                lastSwapTimestamp: result.getUint256(1).toNumber(),
-                totalSwaps: result.getUint256(2).toNumber()
-            };
+            return this.formatUserSwapInfoFromSdk(result);
         } catch (error) {
-            // Return default values if contract call fails
+            if (this.shouldFallbackToRpc(error)) {
+                try {
+                    return await this.getUserSwapInfoRpc(userAddress);
+                } catch (rpcError) {
+                    console.error('Error fetching user swap info via JSON-RPC:', rpcError);
+                }
+            }
             return {
                 dailyUsedHbar: 0,
                 lastSwapTimestamp: 0,
@@ -842,8 +1068,139 @@ export class ContractService {
      * @returns {Promise<Object>} System stats
      */
     async getSystemStats() {
-        const result = await this.callContractFunction('HederaGameLaunchpad', 'getSystemStats');
-        
+        try {
+            const result = await this.callContractFunction('HederaGameLaunchpad', 'getSystemStats');
+            return this.formatSystemStatsFromSdk(result);
+        } catch (error) {
+            if (this.shouldFallbackToRpc(error)) {
+                return this.getSystemStatsRpc();
+            }
+            throw error;
+        }
+    }
+
+    shouldFallbackToRpc(error) {
+        if (!error) {
+            return false;
+        }
+
+        const message = String(error?.message ?? error ?? '');
+        if (message.includes('INSUFFICIENT_PAYER_BALANCE')) {
+            return true;
+        }
+
+        if (message.includes('is not a function')) {
+            return true;
+        }
+
+        const statusCode = error?.status?._code ?? error?.statusCode ?? error?.responseCode;
+        return statusCode === 10;
+    }
+
+    toSafeNumber(value, fallback = 0) {
+        if (value === undefined || value === null) {
+            return fallback;
+        }
+        if (typeof value === 'number') {
+            return Number.isFinite(value) ? value : fallback;
+        }
+        if (typeof value === 'bigint') {
+            return Number(value);
+        }
+        if (typeof value === 'object') {
+            if (typeof value.toNumber === 'function') {
+                try {
+                    return value.toNumber();
+                } catch (_) {}
+            }
+            if (typeof value.toString === 'function') {
+                const numeric = Number(value.toString());
+                return Number.isNaN(numeric) ? fallback : numeric;
+            }
+        }
+        const numeric = Number(value);
+        return Number.isNaN(numeric) ? fallback : numeric;
+    }
+
+    defaultSwapRate() {
+        return {
+            hbarToHplayRate: 500,
+            bonusMultiplierMin: 100,
+            bonusMultiplierMax: 150,
+            dailyLimitHbar: 1000 * 10 ** 8,
+            faucetEnabled: true
+        };
+    }
+
+    buildSwapRate(rateValue, dailyLimitValue, enabledValue) {
+        const normalizedRate = this.toSafeNumber(rateValue) / 10 ** 8;
+        return {
+            hbarToHplayRate: Number.isFinite(normalizedRate) ? normalizedRate : 0,
+            bonusMultiplierMin: 100,
+            bonusMultiplierMax: 150,
+            dailyLimitHbar: this.toSafeNumber(dailyLimitValue),
+            faucetEnabled: Boolean(enabledValue)
+        };
+    }
+
+    formatSwapRateFromSdk(result) {
+        if (!result) {
+            return this.defaultSwapRate();
+        }
+        const rateValue = result.getUint256(0);
+        const dailyLimitValue = result.getUint256(1);
+        const enabledValue = result.getBool(2);
+        return this.buildSwapRate(rateValue, dailyLimitValue, enabledValue);
+    }
+
+    formatSwapRateFromRpc(result) {
+        if (!result) {
+            return this.defaultSwapRate();
+        }
+        const rateValue = result.hbarToHplayRate ?? result[0];
+        const dailyLimitValue = result.dailyLimitHbar ?? result[1];
+        const enabledValue = result.enabled ?? result[2];
+        return this.buildSwapRate(rateValue, dailyLimitValue, enabledValue);
+    }
+
+    formatUserSwapInfoFromSdk(result) {
+        if (!result) {
+            return {
+                dailyUsedHbar: 0,
+                lastSwapTimestamp: 0,
+                totalSwaps: 0
+            };
+        }
+        return {
+            dailyUsedHbar: this.toSafeNumber(result.getUint256(0)),
+            lastSwapTimestamp: this.toSafeNumber(result.getUint256(1)),
+            totalSwaps: this.toSafeNumber(result.getUint256(2))
+        };
+    }
+
+    formatUserSwapInfoFromRpc(result) {
+        if (!result) {
+            return {
+                dailyUsedHbar: 0,
+                lastSwapTimestamp: 0,
+                totalSwaps: 0
+            };
+        }
+        const totalValue = result.totalSwappedToday ?? result[0];
+        const lastSwapValue = result.lastSwapTimestamp ?? result[1];
+        const swapsCountValue = result.swapsCount ?? result[2];
+        return {
+            dailyUsedHbar: this.toSafeNumber(totalValue),
+            lastSwapTimestamp: this.toSafeNumber(lastSwapValue),
+            totalSwaps: this.toSafeNumber(swapsCountValue)
+        };
+    }
+
+    formatSystemStatsFromSdk(result) {
+        if (!result) {
+            return this.emptySystemStats();
+        }
+
         return {
             gamesPlayed: result.getUint256(0).toNumber(),
             players: result.getUint256(1).toNumber(),
@@ -851,6 +1208,55 @@ export class ContractService {
             poolBalance: result.getUint256(3).toNumber(),
             totalParticipants: result.getUint256(4).toNumber(),
             initialized: result.getBool(5)
+        };
+    }
+
+    async getSystemStatsRpc() {
+        const contract = this.getEthersContract('HederaGameLaunchpad');
+        const result = await contract.getSystemStats();
+        return this.formatSystemStatsFromRpc(result);
+    }
+
+    formatSystemStatsFromRpc(result) {
+        if (!result) {
+            return this.emptySystemStats();
+        }
+
+        const asArray = Array.isArray(result) ? result : [];
+        const pick = (index, key) => {
+            if (result && typeof result === 'object' && key in result) {
+                return result[key];
+            }
+            return asArray[index];
+        };
+
+        const toNumber = (value) => this.toSafeNumber(value);
+
+        const toBoolean = (value) => {
+            if (typeof value === 'boolean') {
+                return value;
+            }
+            return Boolean(value);
+        };
+
+        return {
+            gamesPlayed: toNumber(pick(0, 'gamesPlayed')),
+            players: toNumber(pick(1, 'players')),
+            rewardsDistributed: toNumber(pick(2, 'rewardsDistributed')),
+            poolBalance: toNumber(pick(3, 'poolBalance')),
+            totalParticipants: toNumber(pick(4, 'totalParticipants')),
+            initialized: toBoolean(pick(5, 'initialized'))
+        };
+    }
+
+    emptySystemStats() {
+        return {
+            gamesPlayed: 0,
+            players: 0,
+            rewardsDistributed: 0,
+            poolBalance: 0,
+            totalParticipants: 0,
+            initialized: false
         };
     }
 

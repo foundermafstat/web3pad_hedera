@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { FaList, FaBookOpen } from 'react-icons/fa';
 import { PageWithFooter } from '@/components/PageWithFooter';
@@ -116,6 +116,38 @@ export function ContractsClient({
 	}>(null);
 	const [gameIdInput, setGameIdInput] = useState('');
 	const [serverAddressInput, setServerAddressInput] = useState('');
+	const [gameMetadata, setGameMetadata] = useState<Record<string, any> | null>(null);
+	const [gameMetadataLoading, setGameMetadataLoading] = useState(false);
+	const [gameRegistrationTx, setGameRegistrationTx] = useState<
+		| null
+		| {
+			transactionId: string | null;
+			transactionHash: string | null;
+			consensusTimestamp: string | null;
+			metadataUri: string | null;
+			serverAddress: string | null;
+		}
+	>(null);
+	const metadataIconIpfs = useMemo(() => {
+		const assets = (gameMetadata as any)?.assets;
+		return (
+			assets?.icon ||
+			assets?.preview ||
+			assets?.iconGateway ||
+			gameRegistryInfo?.gameModule?.metadataURI ||
+			null
+		);
+	}, [gameMetadata, gameRegistryInfo?.gameModule?.metadataURI]);
+	const metadataIconUrl = useMemo(
+		() => resolveIpfsUrl(metadataIconIpfs),
+		[metadataIconIpfs]
+	);
+	const hashscanUrl = useMemo(() => {
+		if (!gameRegistrationTx?.transactionId) {
+			return null;
+		}
+		return `https://hashscan.io/testnet/transaction/${gameRegistrationTx.transactionId}`;
+	}, [gameRegistrationTx]);
 	const [nftManagerInfo, setNftManagerInfo] = useState<null | {
 		totalNFTs?: number;
 		tokenId?: string;
@@ -495,6 +527,84 @@ export function ContractsClient({
 			fetchGameRegistry();
 		}
 	}, [activeTab, gameIdInput, serverAddressInput]);
+
+	useEffect(() => {
+		const metadataUri = gameRegistryInfo?.gameModule?.metadataURI;
+		if (!metadataUri) {
+			setGameMetadata(null);
+			setGameMetadataLoading(false);
+			return;
+		}
+
+		let cancelled = false;
+		const fetchMetadata = async () => {
+			setGameMetadataLoading(true);
+			try {
+				const url = resolveIpfsUrl(metadataUri);
+				if (!url) {
+					return;
+				}
+				const res = await fetch(url, { cache: 'no-store' });
+				if (!res.ok) {
+					throw new Error(`Failed to load metadata (${res.status})`);
+				}
+				const json = await res.json();
+				if (!cancelled) {
+					setGameMetadata(json);
+				}
+			} catch (error) {
+				console.warn('Failed to load game metadata', error);
+				if (!cancelled) {
+					setGameMetadata(null);
+				}
+			} finally {
+				if (!cancelled) {
+					setGameMetadataLoading(false);
+				}
+			}
+		};
+
+		fetchMetadata();
+		return () => {
+			cancelled = true;
+		};
+	}, [gameRegistryInfo?.gameModule?.metadataURI]);
+
+	useEffect(() => {
+		const gameId = gameRegistryInfo?.gameId;
+		if (!gameId) {
+			setGameRegistrationTx(null);
+			return;
+		}
+
+		let ignore = false;
+		const fetchRegistrationTx = async () => {
+			try {
+				const base =
+					process.env.NEXT_PUBLIC_SERVER_BASE_URL || 'http://localhost:3001';
+				const res = await fetch(
+					`${base}/api/contracts/game-registry/rpc/registration/${encodeURIComponent(
+						gameId
+					)}`,
+					{ cache: 'no-store' }
+				);
+				const json = await res.json();
+				if (!ignore) {
+					setGameRegistrationTx(json?.data ?? null);
+				}
+			} catch (error) {
+				console.warn('Failed to load game registration transaction', error);
+				if (!ignore) {
+					setGameRegistrationTx(null);
+				}
+			}
+		};
+
+		fetchRegistrationTx();
+		return () => {
+			ignore = true;
+		};
+	}, [gameRegistryInfo?.gameId]);
 
 	// Fetch NFTManager info when its tab becomes active
 	useEffect(() => {
@@ -1312,12 +1422,50 @@ export function ContractsClient({
 													</div>
 												</div>
 											)}
-											{!gameIdInput && (
-												<div className="mt-4 p-4 bg-card border border-border rounded-md">
-													<p className="text-sm text-muted-foreground">
-														Enter a Game ID above to view game registry
-														information
-													</p>
+											{(metadataIconUrl || hashscanUrl) && (
+												<div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+													{metadataIconUrl && (
+														<div className="bg-card border border-border rounded-md p-4 flex flex-col gap-3">
+															<div className="text-xs text-muted-foreground">Game image (IPFS)</div>
+															{gameMetadataLoading ? (
+																<p className="text-sm text-muted-foreground">Loading metadata…</p>
+															) : (
+																<img
+																	src={metadataIconUrl}
+																	alt="Game IPFS asset"
+																	className="w-40 h-40 object-cover rounded-md border border-border"
+																/>
+															)}
+															{metadataIconIpfs && (
+																<div className="text-xs text-foreground break-all">
+																	{metadataIconIpfs}
+																</div>
+															)}
+														</div>
+													)}
+													{hashscanUrl && (
+														<div className="bg-card border border-border rounded-md p-4 flex flex-col gap-3">
+															<div className="text-xs text-muted-foreground">Registration transaction</div>
+															<a
+																href={hashscanUrl}
+																target="_blank"
+																rel="noopener noreferrer"
+																className="text-sm text-primary underline"
+															>
+																View on Hashscan
+															</a>
+															{gameRegistrationTx?.consensusTimestamp && (
+																<div className="text-xs text-muted-foreground">
+																	Timestamp: {gameRegistrationTx.consensusTimestamp}
+																</div>
+															)}
+															{gameRegistrationTx?.transactionHash && (
+																<div className="text-xs text-muted-foreground break-all">
+																	Hash: {gameRegistrationTx.transactionHash}
+																</div>
+															)}
+														</div>
+													)}
 												</div>
 											)}
 										</div>
@@ -1708,4 +1856,21 @@ export function ContractsClient({
 			</div>
 		</PageWithFooter>
 	);
-}
+};
+
+const DEFAULT_IPFS_GATEWAY =
+	process.env.NEXT_PUBLIC_IPFS_GATEWAY?.replace(/\/$/, '') ||
+	'https://ipfs.io/ipfs';
+
+const resolveIpfsUrl = (uri?: string | null) => {
+ if (!uri) {
+ 	return null;
+ }
+
+ if (uri.startsWith('ipfs://')) {
+ 	const path = uri.replace('ipfs://', '');
+ 	return `${DEFAULT_IPFS_GATEWAY}/${path}`;
+ }
+
+ return uri;
+};

@@ -125,8 +125,15 @@ class GameRoomManager {
 
 		// Проверяем, не добавлен ли уже игрок
 		if (room.game.players.has(socket.id)) {
+			const existingPlayer = room.game.players.get(socket.id);
+			if (existingPlayer?.gameOver) {
+				console.log(`[GameRoomManager] Resetting player ${playerName} for new session in room ${roomId}`);
+				room.game.players.delete(socket.id);
+				const resetData = room.game.addPlayer(socket.id, playerName, userId, walletAddress);
+				return { room, playerData: resetData };
+			}
 			console.log(`[GameRoomManager] Player ${playerName} already in room ${roomId}`);
-			return { room, playerData: room.game.players.get(socket.id).getPlayerData() };
+			return { room, playerData: existingPlayer.getPlayerData() };
 		}
 
 		// Добавляем игрока в игру с walletAddress
@@ -343,6 +350,48 @@ class GameRoomManager {
 		});
 
 		return newDimensions;
+	}
+
+	// Save player's post-game signature
+	handlePlayerResultSignature(playerId, signaturePayload) {
+		const roomId = this.playerToRoom.get(playerId);
+		if (!roomId) return null;
+
+		const room = this.rooms.get(roomId);
+		if (!room || typeof room.game.recordPlayerSignature !== 'function') {
+			return null;
+		}
+
+		const result = room.game.recordPlayerSignature(playerId, signaturePayload);
+		if (result) {
+			room.sockets.forEach((socket) => {
+				socket.emit('playerSignatureRecorded', {
+					playerId,
+					signature: result,
+				});
+			});
+
+			const player = room.game.players.get(playerId);
+			if (player?.gameOver && !player.resultSubmitted) {
+				room.game
+					.saveGameResultToBlockchain(playerId)
+					.then((blockchainResult) => {
+						if (blockchainResult) {
+							room.sockets.forEach((socket) => {
+								socket.emit('gameResultSubmitted', {
+									playerId,
+									blockchainResult,
+								});
+							});
+						}
+					})
+					.catch((error) => {
+						console.error('[GameRoomManager] Error saving result after signature:', error);
+					});
+			}
+		}
+
+		return result;
 	}
 
 	// Отправить событие всем игрокам в комнате

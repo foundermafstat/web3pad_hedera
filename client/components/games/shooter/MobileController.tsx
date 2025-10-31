@@ -1,11 +1,20 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { io, Socket } from 'socket.io-client';
-import { FaGamepad, FaBolt, FaHeart, FaTrophy, FaShieldAlt, FaTachometerAlt, FaWifi, FaCompass } from 'react-icons/fa';
+import {
+	FaGamepad,
+	FaBolt,
+	FaHeart,
+	FaTrophy,
+	FaShieldAlt,
+	FaTachometerAlt,
+	FaWifi,
+	FaCompass,
+} from 'react-icons/fa';
 import AuthModal from '../../AuthModal';
-import LandscapeOrientationLock from '../../LandscapeOrientationLock';
+import { useWallet } from '@/contexts/WalletContext';
 
 interface MobileControllerProps {
 	gameId: string;
@@ -13,6 +22,7 @@ interface MobileControllerProps {
 }
 
 interface PlayerData {
+	shotsFired: number;
 	id: string;
 	name: string;
 	x: number;
@@ -22,22 +32,48 @@ interface PlayerData {
 	facingDirection?: { x: number; y: number };
 	aimDirection?: { x: number; y: number };
 	isMoving?: boolean;
+	walletAddress?: string | null;
+	kills?: number;
+	deaths?: number;
+	botKills?: number;
+	lives?: number;
+	maxLives?: number;
+	gameOver?: boolean;
+	finalScore?: number;
+	timeSurvivedSeconds?: number;
+	resultSubmitted?: boolean;
+	resultSignature?: any;
+}
+
+interface GameOverState {
+	finalScore: number;
+	player: PlayerData;
+	blockchainResult?: any;
+	timestamp: number;
 }
 
 const MobileController: React.FC<MobileControllerProps> = ({
 	gameId,
 	gameType,
 }) => {
-  const { data: session, status } = useSession();
+	const { data: session, status } = useSession();
+	const {
+		isConnected: walletConnected,
+		walletAddress,
+		connectWallet,
+		refreshWalletState,
+		signMessage,
+	} = useWallet();
+	const targetNetwork: 'mainnet' | 'testnet' = 'testnet';
 	const [showAuthModal, setShowAuthModal] = useState(false);
 	const [connected, setConnected] = useState(false);
 	const [playerName, setPlayerName] = useState('');
 	const [isJoined, setIsJoined] = useState(false);
 	const [playerData, setPlayerData] = useState<PlayerData | null>(null);
-  const [playerStats, setPlayerStats] = useState({
-    kills: 0,
-    deaths: 0,
-    botKills: 0,
+	const [playerStats, setPlayerStats] = useState({
+		kills: 0,
+		deaths: 0,
+		botKills: 0,
 		alive: true,
 		effects: {
 			speedBoost: { active: false, endTime: 0 },
@@ -47,6 +83,16 @@ const MobileController: React.FC<MobileControllerProps> = ({
 	const [connectionStatus, setConnectionStatus] = useState<
 		'connecting' | 'connected' | 'disconnected'
 	>('connecting');
+	const [sessionActive, setSessionActive] = useState(false);
+	const [gameOverState, setGameOverState] = useState<GameOverState | null>(
+		null
+	);
+	const [isSigningResult, setIsSigningResult] = useState(false);
+	const [signatureError, setSignatureError] = useState<string | null>(null);
+	const [signatureData, setSignatureData] = useState<{
+		signatureMap: any;
+		message: string;
+	} | null>(null);
 
 	// Check authentication on mount
 	useEffect(() => {
@@ -57,7 +103,6 @@ const MobileController: React.FC<MobileControllerProps> = ({
 		}
 	}, [status, session]);
 
-
 	const socketRef = useRef<Socket | null>(null);
 	const joystickRef = useRef<HTMLDivElement>(null);
 	const knobRef = useRef<HTMLDivElement>(null);
@@ -66,12 +111,20 @@ const MobileController: React.FC<MobileControllerProps> = ({
 	const isDraggingRef = useRef(false);
 	const joystickTouchIdRef = useRef<number | null>(null); // Track specific touch for joystick
 	const lastInputSentRef = useRef({ x: 0, y: 0 });
+	const gameOverRef = useRef(false);
 
-  useEffect(() => {
+	useEffect(() => {
+		gameOverRef.current = Boolean(gameOverState);
+	}, [gameOverState]);
+
+	useEffect(() => {
 		// Import dynamically to get the current socket URL
 		import('@/lib/socket-utils').then(({ getSocketServerUrl }) => {
 			const socketUrl = getSocketServerUrl();
-			console.log('[ShooterController] Connecting to socket server at:', socketUrl);
+			console.log(
+				'[ShooterController] Connecting to socket server at:',
+				socketUrl
+			);
 			const socket = io(socketUrl, {
 				transports: ['websocket', 'polling'],
 				timeout: 5000,
@@ -83,10 +136,17 @@ const MobileController: React.FC<MobileControllerProps> = ({
 			socketRef.current = socket;
 
 			socket.on('connect', () => {
-				console.log('[ShooterController] Connected to server with ID:', socket.id);
+				console.log(
+					'[ShooterController] Connected to server with ID:',
+					socket.id
+				);
 				setConnected(true);
 				setConnectionStatus('connected');
-			
+				setSessionActive(false);
+				setGameOverState(null);
+				setSignatureData(null);
+				setSignatureError(null);
+
 				// Try to create room if it doesn't exist
 				console.log('[ShooterController] Attempting to create room:', gameId);
 				socket.emit('createRoom', {
@@ -104,6 +164,8 @@ const MobileController: React.FC<MobileControllerProps> = ({
 				setConnected(false);
 				setConnectionStatus('disconnected');
 				setIsJoined(false);
+				setSessionActive(false);
+				setGameOverState(null);
 			});
 
 			socket.on('connect_error', (error) => {
@@ -122,6 +184,10 @@ const MobileController: React.FC<MobileControllerProps> = ({
 			socket.on('room:joined', (data) => {
 				console.log('[ShooterController] Player joined successfully:', data);
 				setIsJoined(true);
+				setSessionActive(true);
+				setGameOverState(null);
+				setSignatureData(null);
+				setSignatureError(null);
 				if (data.playerData) {
 					setPlayerData(data.playerData);
 					// Initialize aim direction from player data
@@ -132,6 +198,10 @@ const MobileController: React.FC<MobileControllerProps> = ({
 			});
 
 			socket.on('gameState', (state) => {
+				if (gameOverRef.current) {
+					return;
+				}
+
 				// Update player stats
 				const player = state.players.find((p: any) => p.id === socket.id);
 				if (player) {
@@ -168,6 +238,37 @@ const MobileController: React.FC<MobileControllerProps> = ({
 				}
 			});
 
+			socket.on('gameOver', (payload) => {
+				if (!payload?.player || payload.player.id !== socket.id) {
+					return;
+				}
+
+				setSessionActive(false);
+				setGameOverState({
+					finalScore: payload.finalScore,
+					player: payload.player,
+					blockchainResult: payload.blockchainResult || null,
+					timestamp: Date.now(),
+				});
+			});
+
+			socket.on('playerSignatureRecorded', ({ playerId, signature }) => {
+				if (playerId !== socket.id) return;
+				setSignatureData(signature);
+			});
+
+			socket.on('gameResultSubmitted', ({ playerId, blockchainResult }) => {
+				if (playerId !== socket.id) return;
+				setGameOverState((prev) =>
+					prev
+						? {
+								...prev,
+								blockchainResult: blockchainResult || prev.blockchainResult,
+						  }
+						: prev
+				);
+			});
+
 			return () => {
 				socket.disconnect();
 			};
@@ -176,7 +277,7 @@ const MobileController: React.FC<MobileControllerProps> = ({
 
 	// Send input updates at regular intervals
 	useEffect(() => {
-		if (!isJoined || !socketRef.current) return;
+		if (!isJoined || !sessionActive || !socketRef.current) return;
 
 		const sendInput = () => {
 			const currentInput = inputStateRef.current;
@@ -195,24 +296,138 @@ const MobileController: React.FC<MobileControllerProps> = ({
 
 		const interval = setInterval(sendInput, 16); // ~60 FPS
 		return () => clearInterval(interval);
-	}, [isJoined]);
+	}, [isJoined, sessionActive]);
 
 	const joinGame = () => {
 		if (socketRef.current && playerName.trim() && connected) {
-			console.log('[ShooterController] Attempting to join room with name:', playerName.trim(), 'gameId:', gameId);
+			console.log(
+				'[ShooterController] Attempting to join room with name:',
+				playerName.trim(),
+				'gameId:',
+				gameId
+			);
 			socketRef.current.emit('room:join', {
 				roomId: gameId,
 				playerName: playerName.trim(),
+				walletAddress: walletAddress || null,
 			});
 		}
 	};
 
 	const shoot = () => {
-		if (socketRef.current && isJoined && playerStats.alive) {
+		if (socketRef.current && isJoined && sessionActive && playerStats.alive) {
 			socketRef.current.emit('shooter:shoot');
 			console.log('Shot fired in direction:', aimDirectionRef.current);
 		}
 	};
+
+	const handleConnectWallet = useCallback(async () => {
+		try {
+			setSignatureError(null);
+			await connectWallet(targetNetwork);
+			await refreshWalletState();
+		} catch (error: any) {
+			console.error('[ShooterController] Wallet connect error:', error);
+			setSignatureError(error?.message || 'Failed to connect wallet');
+		}
+	}, [connectWallet, refreshWalletState, targetNetwork]);
+
+	const buildResultMessage = useCallback(() => {
+		if (!gameOverState) return '';
+		const wallet = walletAddress || gameOverState.player.walletAddress || '';
+		const parts = [
+			'ShooterResult',
+			gameId,
+			gameOverState.player.id,
+			wallet,
+			String(gameOverState.finalScore ?? gameOverState.player.finalScore ?? 0),
+			String(gameOverState.player.kills ?? 0),
+			String(gameOverState.player.botKills ?? 0),
+			String(gameOverState.player.deaths ?? 0),
+			String(gameOverState.player.timeSurvivedSeconds ?? 0),
+			String(gameOverState.timestamp),
+		];
+		return parts.join('|');
+	}, [gameOverState, gameId, walletAddress]);
+
+	const handleSignResult = useCallback(async () => {
+		if (!gameOverState || isSigningResult) return;
+		try {
+			setSignatureError(null);
+			setIsSigningResult(true);
+
+			if (!walletConnected || !walletAddress) {
+				await connectWallet(targetNetwork);
+				await refreshWalletState();
+			}
+
+			const message = buildResultMessage();
+			if (!message) {
+				throw new Error('Invalid result payload for signing');
+			}
+
+			const signature = await signMessage(message);
+			setSignatureData(signature);
+
+			socketRef.current?.emit('shooter:resultSignature', {
+				roomId: gameId,
+				playerId: gameOverState.player.id,
+				walletAddress:
+					walletAddress || gameOverState.player.walletAddress || null,
+				message,
+				signatureMap: signature.signatureMap,
+				finalScore: gameOverState.finalScore,
+				timestamp: gameOverState.timestamp,
+			});
+		} catch (error: any) {
+			console.error('[ShooterController] Error signing result:', error);
+			setSignatureError(error?.message || 'Failed to sign result');
+		} finally {
+			setIsSigningResult(false);
+		}
+	}, [
+		buildResultMessage,
+		connectWallet,
+		gameId,
+		gameOverState,
+		isSigningResult,
+		refreshWalletState,
+		signMessage,
+		targetNetwork,
+		walletAddress,
+		walletConnected,
+	]);
+
+	const handleRestart = useCallback(() => {
+		setGameOverState(null);
+		setSignatureData(null);
+		setSignatureError(null);
+		setSessionActive(false);
+		setIsJoined(false);
+		setPlayerStats({
+			kills: 0,
+			deaths: 0,
+			botKills: 0,
+			alive: true,
+			effects: {
+				speedBoost: { active: false, endTime: 0 },
+				shield: { active: false, endTime: 0 },
+			},
+		});
+		setPlayerData(null);
+	}, []);
+
+	useEffect(() => {
+		if (!gameOverState) return;
+		if (signatureData || isSigningResult || signatureError) return;
+		handleSignResult();
+	}, [
+		gameOverState,
+		signatureData,
+		isSigningResult,
+		signatureError,
+		handleSignResult,
+	]);
 
 	const handleJoystickStart = (e: React.TouchEvent | React.MouseEvent) => {
 		e.preventDefault();
@@ -306,7 +521,9 @@ const MobileController: React.FC<MobileControllerProps> = ({
 
 			// Send aim direction to server
 			if (socketRef.current) {
-				socketRef.current.emit('shooter:aim', { direction: aimDirectionRef.current });
+				socketRef.current.emit('shooter:aim', {
+					direction: aimDirectionRef.current,
+				});
 			}
 		}
 	};
@@ -346,7 +563,7 @@ const MobileController: React.FC<MobileControllerProps> = ({
 	};
 
 	// Global event listeners for better touch/mouse handling
-  useEffect(() => {
+	useEffect(() => {
 		const handleGlobalMouseMove = (e: MouseEvent) => {
 			if (isDraggingRef.current) {
 				handleJoystickMove(e);
@@ -385,7 +602,6 @@ const MobileController: React.FC<MobileControllerProps> = ({
 			document.removeEventListener('touchend', handleGlobalTouchEnd);
 		};
 	}, []);
-
 
 	// Auth loading state
 	if (status === 'loading') {
@@ -430,7 +646,7 @@ const MobileController: React.FC<MobileControllerProps> = ({
 	}
 
 	if (connectionStatus === 'disconnected') {
-    return (
+		return (
 			<div className="min-h-screen bg-gradient-to-br from-red-900 to-red-700 flex items-center justify-center p-4">
 				<div className="text-center">
 					<FaWifi className="w-12 h-12 text-white mx-auto mb-4" />
@@ -445,12 +661,153 @@ const MobileController: React.FC<MobileControllerProps> = ({
 						Retry Connection
 					</button>
 				</div>
-      </div>
-    );
-  }
+			</div>
+		);
+	}
+
+	if (gameOverState) {
+		const totalShots = gameOverState.player?.shotsFired ?? 0;
+		return (
+			<div className="min-h-screen bg-gradient-to-br from-[#150428] via-[#1f0f3d] to-black flex items-center justify-center p-6">
+				<div className="w-full max-w-md bg-black/60 border border-white/10 backdrop-blur-2xl rounded-3xl p-8 space-y-6">
+					<div className="text-center space-y-2">
+						<div className="flex items-center justify-center space-x-2">
+							<FaGamepad className="w-6 h-6 text-purple-300" />
+							<h1 className="text-white text-2xl font-semibold">
+								Match Finished
+							</h1>
+						</div>
+						<p className="text-gray-300">
+							Your score:{' '}
+							<span className="text-white font-semibold">
+								{gameOverState.finalScore}
+							</span>
+						</p>
+					</div>
+
+					<div className="grid grid-cols-2 gap-3 text-sm text-gray-300">
+						<div className="bg-white/5 border border-white/10 rounded-2xl p-3 text-center">
+							<p className="text-xs uppercase tracking-wide text-gray-400">
+								Kills
+							</p>
+							<p className="text-white text-xl font-semibold">
+								{gameOverState.player.kills ?? 0}
+							</p>
+						</div>
+						<div className="bg-white/5 border border-white/10 rounded-2xl p-3 text-center">
+							<p className="text-xs uppercase tracking-wide text-gray-400">
+								Bots
+							</p>
+							<p className="text-white text-xl font-semibold">
+								{gameOverState.player.botKills ?? 0}
+							</p>
+						</div>
+						<div className="bg-white/5 border border-white/10 rounded-2xl p-3 text-center">
+							<p className="text-xs uppercase tracking-wide text-gray-400">
+								Deaths
+							</p>
+							<p className="text-white text-xl font-semibold">
+								{gameOverState.player.deaths ?? 0}
+							</p>
+						</div>
+						<div className="bg-white/5 border border-white/10 rounded-2xl p-3 text-center">
+							<p className="text-xs uppercase tracking-wide text-gray-400">
+								Survival
+							</p>
+							<p className="text-white text-xl font-semibold">
+								{gameOverState.player.timeSurvivedSeconds ?? 0}
+								<span className="text-sm ml-1">sec</span>
+							</p>
+						</div>
+					</div>
+
+					<div>
+						<label className="block text-xs uppercase tracking-wide text-gray-400 mb-2">
+							Nickname
+						</label>
+						<input
+							type="text"
+							value={playerName}
+							onChange={(e) => setPlayerName(e.target.value)}
+							placeholder="Enter nickname"
+							className="w-full bg-white/5 border border-white/20 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/40 text-white rounded-xl px-4 py-3 outline-none transition"
+							maxLength={20}
+						/>
+					</div>
+
+					<div className="grid gap-3">
+						<button
+							onClick={handleSignResult}
+							disabled={isSigningResult || !!signatureData}
+							className={`w-full py-3 rounded-xl font-semibold transition ${
+								signatureData
+									? 'bg-emerald-600 text-white'
+									: isSigningResult
+									? 'bg-purple-500/40 text-white'
+									: 'bg-gradient-to-r from-purple-500 to-indigo-500 text-white hover:from-purple-600 hover:to-indigo-600'
+							}`}
+						>
+							{signatureData
+								? 'Result signed'
+								: isSigningResult
+								? 'Signing…'
+								: 'Sign result'}
+						</button>
+
+						{!walletConnected && (
+							<button
+								onClick={handleConnectWallet}
+								className="w-full py-3 rounded-xl font-semibold bg-white/10 text-white border border-white/20 hover:bg-white/20 transition"
+							>
+								Connect wallet
+							</button>
+						)}
+
+						<button
+							onClick={handleRestart}
+							className="w-full py-3 rounded-xl font-semibold bg-transparent border border-white/20 text-white hover:bg-white/10 transition"
+						>
+							Play again
+						</button>
+					</div>
+
+					<div className="text-xs text-gray-400 space-y-2">
+						<p>
+							Wallet:{' '}
+							{walletAddress ||
+								gameOverState.player.walletAddress ||
+								'not connected'}
+						</p>
+						<p>Shots fired: {totalShots}</p>
+					</div>
+
+					{signatureError && (
+						<div className="text-red-400 text-sm text-center">
+							{signatureError}
+						</div>
+					)}
+
+					{signatureData && (
+						<div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs p-3 rounded-xl break-words">
+							Signature saved. Submitted to server.
+						</div>
+					)}
+
+					{gameOverState.blockchainResult && (
+						<div className="bg-purple-500/10 border border-purple-500/30 text-purple-200 text-xs p-3 rounded-xl break-words">
+							Result recorded on-chain. Tx:{' '}
+							{gameOverState.blockchainResult.transactionHash ||
+								gameOverState.blockchainResult.txId ||
+								'—'}
+						</div>
+					)}
+				</div>
+			</div>
+		);
+	}
 
 	if (!isJoined) {
-    return (
+		return (
 			<div className="min-h-screen bg-gradient-to-br from-blue-900 to-purple-900 flex items-center justify-center p-4">
 				<div className="max-w-sm w-full">
 					<div className="text-center mb-8">
@@ -486,15 +843,19 @@ const MobileController: React.FC<MobileControllerProps> = ({
 						>
 							{connected ? 'Join Game' : 'Connecting...'}
 						</button>
+						<p className="text-xs text-gray-300 mt-3 text-center">
+							{walletConnected
+								? 'Wallet connected, the result will be signed automatically.'
+								: 'After the match you will need to connect a wallet to sign the result.'}
+						</p>
 					</div>
-            </div>
-      </div>
-    );
-  }
+				</div>
+			</div>
+		);
+	}
 
-  return (
-
-			<div className="fixed inset-0 w-screen h-screen bg-gradient-to-br from-gray-900 to-black flex flex-col overflow-hidden z-50">
+	return (
+		<div className="fixed inset-0 w-screen h-screen bg-gradient-to-br from-gray-900 to-black flex flex-col overflow-hidden z-50">
 			{/* Header */}
 			<div className="bg-black/50 backdrop-blur-lg px-4 py-3 border-b border-gray-700">
 				<div className="flex items-center justify-between">
@@ -525,26 +886,26 @@ const MobileController: React.FC<MobileControllerProps> = ({
 						>
 							<FaTrophy className="w-4 h-4" />
 							<span>{playerStats.kills}</span>
-            </div>
+						</div>
 						<div
 							className="flex items-center space-x-1 text-orange-400"
 							title="Bot Kills"
 						>
 							<FaBolt className="w-4 h-4" />
 							<span>{playerStats.botKills}</span>
-            </div>
+						</div>
 						<div
 							className="flex items-center space-x-1 text-red-400"
 							title="Deaths"
 						>
 							<FaHeart className="w-4 h-4" />
 							<span>{playerStats.deaths}</span>
-          </div>
+						</div>
 						<div className="flex items-center space-x-1 text-green-400">
 							<FaWifi className="w-4 h-4" />
-          </div>
-        </div>
-      </div>
+						</div>
+					</div>
+				</div>
 
 				{/* Health Bar */}
 				{playerData && (
@@ -598,7 +959,9 @@ const MobileController: React.FC<MobileControllerProps> = ({
 							<p className="text-red-300 font-semibold text-center">
 								You've been eliminated!
 							</p>
-							<p className="text-red-400 text-sm mt-1 text-center">Respawning soon...</p>
+							<p className="text-red-400 text-sm mt-1 text-center">
+								Respawning soon...
+							</p>
 						</div>
 					</div>
 				)}
@@ -622,8 +985,8 @@ const MobileController: React.FC<MobileControllerProps> = ({
 							ref={knobRef}
 							className="absolute top-1/2 left-1/2 w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-700 rounded-full transform -translate-x-1/2 -translate-y-1/2 shadow-2xl border-4 border-blue-300/80 pointer-events-none"
 						></div>
-        </div>
-      </div>
+					</div>
+				</div>
 
 				{/* Action Buttons - Center */}
 				<div className="action-area">
@@ -631,8 +994,8 @@ const MobileController: React.FC<MobileControllerProps> = ({
 						<span className="text-xs text-red-400 font-medium">ACTIONS</span>
 					</div>
 					<button
-            onTouchStart={(e) => {
-              e.preventDefault();
+						onTouchStart={(e) => {
+							e.preventDefault();
 							shoot();
 						}}
 						onMouseDown={(e) => {
@@ -644,7 +1007,7 @@ const MobileController: React.FC<MobileControllerProps> = ({
 					>
 						<FaBolt className="w-10 h-10" />
 					</button>
-      </div>
+				</div>
 
 				{/* Game Status - Right Side */}
 				<div className="info-area">
@@ -661,9 +1024,9 @@ const MobileController: React.FC<MobileControllerProps> = ({
 						</div>
 					</div>
 				</div>
-        </div>
-    </div>
-  );
+			</div>
+		</div>
+	);
 };
 
 export default MobileController;

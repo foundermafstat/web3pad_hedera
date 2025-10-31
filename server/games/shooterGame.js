@@ -1,4 +1,5 @@
 import { BaseGame } from './baseGame.js';
+import { resultVerifierService } from '../lib/result-verifier-service.js';
 
 // Класс игрока для шутера
 class Player {
@@ -15,6 +16,7 @@ class Player {
 		this.kills = 0;
 		this.deaths = 0;
 		this.botKills = 0;
+		this.shotsFired = 0;
 		this.lives = 3; // 3 lives system
 		this.maxLives = 3;
 		this.facingDirection = { x: 0, y: -1 }; // Only for movement direction
@@ -27,6 +29,12 @@ class Player {
 		};
 		this.gameOver = false;
 		this.finalScore = 0;
+		this.sessionStartTime = Date.now();
+		this.timeSurvivedSeconds = 0;
+		this.resultSubmitted = false;
+		this.lastSubmission = null;
+		this.gameOverReported = false;
+		this.resultSignature = null;
 	}
 
 	updateInput(input) {
@@ -110,6 +118,7 @@ class Player {
 		if (!this.alive || now - this.lastShot < 300) return null;
 
 		this.lastShot = now;
+		this.shotsFired++;
 		let shootDirection = { ...this.aimDirection };
 		const magnitude = Math.sqrt(
 			shootDirection.x * shootDirection.x + shootDirection.y * shootDirection.y
@@ -145,16 +154,30 @@ class Player {
 		) {
 			return false;
 		}
-		
+
 		this.health = 0; // Set health to 0 when taking damage
 		this.alive = false;
 		this.deaths++;
 		this.effects.speedBoost.active = false;
 		this.effects.shield.active = false;
-		
-		// Start respawn timer (10 seconds)
-		this.respawnTime = Date.now() + 10000;
-		
+		this.lives = Math.max(0, this.lives - 1);
+
+		const now = Date.now();
+		this.timeSurvivedSeconds = Math.max(
+			this.timeSurvivedSeconds,
+			this.getTimeSurvivedSeconds()
+		);
+
+		if (this.lives <= 0) {
+			this.gameOver = true;
+			this.finalScore = this.calculateScore();
+			this.respawnTime = null;
+		} else {
+			// Start respawn timer (10 seconds)
+			this.respawnTime = now + 10000;
+		}
+
+		this.updateScore();
 		return true;
 	}
 
@@ -190,6 +213,36 @@ class Player {
 		return Math.max(0, Math.ceil((this.respawnTime - now) / 1000));
 	}
 
+	getTimeSurvivedSeconds() {
+		if (this.gameOver) {
+			return this.timeSurvivedSeconds;
+		}
+		return Math.max(0, Math.floor((Date.now() - this.sessionStartTime) / 1000));
+	}
+
+	calculateScore() {
+		const survivalSeconds = this.gameOver
+			? this.timeSurvivedSeconds
+			: this.getTimeSurvivedSeconds();
+		const playerKills = this.kills || 0;
+		const botKills = this.botKills || 0;
+		const totalEliminations = playerKills + botKills;
+		const killScore = playerKills * 300;
+		const botScore = botKills * 120;
+		const survivalScore = Math.min(60000, survivalSeconds * 6);
+		const accuracyBonus = this.shotsFired > 0
+			? Math.floor(((totalEliminations / this.shotsFired) * 100))
+			: 0;
+		const missedShots = Math.max(0, this.shotsFired - totalEliminations);
+		const missPenalty = missedShots * 3;
+		const rawScore = killScore + botScore + survivalScore + accuracyBonus - missPenalty;
+		return Math.max(0, Math.min(1000000, Math.round(rawScore)));
+	}
+
+	updateScore() {
+		this.finalScore = this.calculateScore();
+	}
+
 	updateEffects() {
 		const now = Date.now();
 		if (
@@ -215,6 +268,7 @@ class Player {
 			kills: this.kills,
 			deaths: this.deaths,
 			botKills: this.botKills || 0,
+			shotsFired: this.shotsFired,
 			lives: this.lives,
 			maxLives: this.maxLives,
 			health: this.health,
@@ -224,6 +278,11 @@ class Player {
 			isMoving: this.isMoving,
 			gameOver: this.gameOver,
 			finalScore: this.finalScore,
+			timeSurvivedSeconds: this.getTimeSurvivedSeconds(),
+			resultSubmitted: this.resultSubmitted,
+			lastSubmission: this.lastSubmission,
+			gameOverReported: this.gameOverReported,
+			resultSignature: this.resultSignature,
 			respawnTimeRemaining: this.getRespawnTimeRemaining(),
 		};
 	}
@@ -442,6 +501,47 @@ export class ShooterGame extends BaseGame {
 		});
 	}
 
+	getModuleGameId() {
+		return this.config?.gameModuleId || this.config?.gameId || 'shooter';
+	}
+
+	getPlayerMetrics(player) {
+		const timeSurvivedSeconds = player.getTimeSurvivedSeconds();
+		const botKills = player.botKills || 0;
+		const playerKills = player.kills || 0;
+		const totalEliminations = playerKills + botKills;
+		const shotsFired = player.shotsFired || 0;
+		const accuracy = shotsFired > 0
+			? Number(((totalEliminations / shotsFired) * 100).toFixed(2))
+			: 0;
+
+		return {
+			timeSurvivedSeconds,
+			kills: playerKills,
+			botKills,
+			deaths: player.deaths,
+			shotsFired,
+			totalEliminations,
+			accuracy,
+			finalScore: player.finalScore,
+			livesRemaining: player.lives,
+		};
+	}
+
+	recordPlayerSignature(playerId, signaturePayload) {
+		const player = this.players.get(playerId);
+		if (!player) {
+			return null;
+		}
+
+		player.resultSignature = {
+			...signaturePayload,
+			recordedAt: Date.now(),
+		};
+
+		return player.resultSignature;
+	}
+
 	addPlayer(playerId, playerName, userId = null, walletAddress = null) {
 		const color = this.playerColors[this.colorIndex % this.playerColors.length];
 		this.colorIndex++;
@@ -605,7 +705,10 @@ export class ShooterGame extends BaseGame {
 					const damaged = player.takeDamage();
 					if (damaged) {
 						const shooter = this.players.get(bullet.playerId);
-						if (shooter) shooter.kills++;
+						if (shooter) {
+							shooter.kills++;
+							shooter.updateScore();
+						}
 					}
 					return false;
 				}
@@ -628,6 +731,7 @@ export class ShooterGame extends BaseGame {
 
 					if (killed && shooter) {
 						shooter.botKills++;
+						shooter.updateScore();
 						setTimeout(() => bot.respawn(), 3000);
 					}
 					return false;
@@ -698,49 +802,63 @@ export class ShooterGame extends BaseGame {
 	async saveGameResultToBlockchain(playerId) {
 		const player = this.players.get(playerId);
 		if (!player || !player.walletAddress || !player.gameOver) {
+			if (player && !player.walletAddress && player.gameOver) {
+				console.warn('[ShooterGame] Skipping blockchain submission, wallet address missing for player', player.id);
+				player.resultSubmitted = true;
+				player.lastSubmission = null;
+			}
+			return null;
+		}
+
+		if (player.resultSubmitted) {
+			return player.lastSubmission;
+		}
+
+		const score = player.calculateScore();
+		player.finalScore = score;
+		const metrics = this.getPlayerMetrics(player);
+		const moduleGameId = this.getModuleGameId();
+		const signaturePayload = player.resultSignature || null;
+
+		if (!signaturePayload) {
+			console.warn('[ShooterGame] Result signature missing, awaiting controller confirmation for player', playerId);
 			return null;
 		}
 
 		try {
-			// Prepare game result data
-			const gameResult = {
+			const submission = await resultVerifierService.submitGameResult({
 				playerAddress: player.walletAddress,
-				finalScore: player.finalScore,
-				kills: player.kills,
-				deaths: player.deaths,
-				botKills: player.botKills,
-				gameType: 'shooter',
-				roomId: this.gameId,
-				timestamp: Date.now()
-			};
-
-			// Call blockchain API to save result
-			const response = await fetch('http://localhost:3001/api/blockchain/save-game-result', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
+				gameId: moduleGameId,
+				score,
+				metrics: {
+					...metrics,
+					roomId: this.gameId,
+					playerId: player.id,
+					playerSignature: signaturePayload,
 				},
-				body: JSON.stringify(gameResult)
 			});
 
-			if (response.ok) {
-				const result = await response.json();
-				console.log('Game result saved to blockchain:', result);
-				return result;
-			} else {
-				console.error('Failed to save game result to blockchain:', response.statusText);
-				return null;
-			}
+			player.resultSubmitted = true;
+			player.lastSubmission = {
+				...submission,
+				score,
+				metrics,
+			};
+
+			console.log('[ShooterGame] Game result submitted via ResultVerifier:', player.lastSubmission);
+			return player.lastSubmission;
 		} catch (error) {
-			console.error('Error saving game result to blockchain:', error);
-			return null;
+			console.error('[ShooterGame] Error submitting game result to ResultVerifier:', error);
+			throw error;
 		}
 	}
 
 	// Check if any player has game over
 	checkGameOver() {
 		for (const [, player] of this.players) {
-			if (player.gameOver) {
+			if (player.gameOver && !player.gameOverReported) {
+				player.updateScore();
+				player.gameOverReported = true;
 				return {
 					gameOver: true,
 					player: player.getPlayerData(),
