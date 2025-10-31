@@ -24,6 +24,7 @@
   "author": "W3P Team",
   "license": "MIT",
   "dependencies": {
+    "@hashgraph/proto": "^2.24.0",
     "@hashgraph/sdk": "^2.50.0",
     "@noble/hashes": "^2.0.1",
     "@prisma/client": "^6.1.0",

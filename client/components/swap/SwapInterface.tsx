@@ -266,6 +266,7 @@ export function SwapInterface() {
 				functionName: transactionData.functionName,
 				hbarAmount: transactionData.hbarAmount,
 				hasTransactionData: !!transactionData.transactionData,
+				hasTransactionBodyData: !!transactionData.transactionBodyData,
 			});
 
 			// Use global wallet state - this is the source of truth
@@ -294,16 +295,29 @@ export function SwapInterface() {
 				walletType,
 			});
 
+			// CRITICAL: Use transactionBodyData for WalletConnect (only body bytes to sign)
+			// Use full transactionData for other wallets
+			const bytesToSign = walletType === 'walletconnect' && transactionData.transactionBodyData
+				? transactionData.transactionBodyData
+				: transactionData.transactionData;
+
+			console.log('📦 Bytes to sign:', {
+				useBodyData: walletType === 'walletconnect' && !!transactionData.transactionBodyData,
+				bodyDataLength: transactionData.transactionBodyData?.length,
+				fullDataLength: transactionData.transactionData?.length,
+				selectedLength: Array.isArray(bytesToSign) ? bytesToSign.length : bytesToSign instanceof Uint8Array ? bytesToSign.length : 0
+			});
+
 			// Convert transaction data to Uint8Array if needed
 			let transactionBytes: Uint8Array;
-			if (transactionData.transactionData instanceof Uint8Array) {
-				transactionBytes = transactionData.transactionData;
-			} else if (Array.isArray(transactionData.transactionData)) {
+			if (bytesToSign instanceof Uint8Array) {
+				transactionBytes = bytesToSign;
+			} else if (Array.isArray(bytesToSign)) {
 				// JSON serialized Uint8Array comes as array of numbers
-				transactionBytes = new Uint8Array(transactionData.transactionData);
-			} else if (typeof transactionData.transactionData === 'string') {
+				transactionBytes = new Uint8Array(bytesToSign);
+			} else if (typeof bytesToSign === 'string') {
 				// Convert hex string to Uint8Array
-				const hex = transactionData.transactionData.replace('0x', '');
+				const hex = bytesToSign.replace('0x', '');
 				if (hex.length === 0) {
 					throw new Error('Empty transaction string');
 				}
@@ -311,21 +325,21 @@ export function SwapInterface() {
 					hex.match(/.{1,2}/g)!.map((byte: string) => parseInt(byte, 16))
 				);
 			} else if (
-				transactionData.transactionData &&
-				typeof transactionData.transactionData === 'object'
+				bytesToSign &&
+				typeof bytesToSign === 'object'
 			) {
 				// Check if it's an object with bytes property or similar
 				console.log(
 					'Transaction data is an object, checking for bytes property...',
-					transactionData.transactionData
+					bytesToSign
 				);
 
 				// Try to find bytes in common locations
 				const bytes =
-					transactionData.transactionData.bytes ||
-					transactionData.transactionData.data ||
-					transactionData.transactionData.transactionBytes ||
-					transactionData.transactionData.bodyBytes;
+					bytesToSign.bytes ||
+					bytesToSign.data ||
+					bytesToSign.transactionBytes ||
+					bytesToSign.bodyBytes;
 
 				if (bytes) {
 					if (Array.isArray(bytes)) {
@@ -346,36 +360,39 @@ export function SwapInterface() {
 						transactionBytes = new Uint8Array(transactionData.bytes);
 					} else {
 						console.error('Unknown transaction data format:', {
-							type: typeof transactionData.transactionData,
-							isArray: Array.isArray(transactionData.transactionData),
-							value: transactionData.transactionData,
+							type: typeof bytesToSign,
+							isArray: Array.isArray(bytesToSign),
+							value: bytesToSign,
 							keys: transactionData ? Object.keys(transactionData) : [],
-							transactionDataKeys: transactionData.transactionData
-								? Object.keys(transactionData.transactionData)
+							bytesToSignKeys: bytesToSign && typeof bytesToSign === 'object'
+								? Object.keys(bytesToSign)
 								: [],
 						});
 						throw new Error(
-							`Invalid transaction data format: ${typeof transactionData.transactionData}. Object lacks bytes/data/transactionBytes. Structure: ${JSON.stringify(
-								Object.keys(transactionData.transactionData || {})
+							`Invalid transaction data format: ${typeof bytesToSign}. Object lacks bytes/data/transactionBytes. Structure: ${JSON.stringify(
+								Object.keys(bytesToSign || {})
 							)}`
 						);
 					}
 				}
 			} else {
 				console.error('Unknown transaction data format:', {
-					type: typeof transactionData.transactionData,
-					isArray: Array.isArray(transactionData.transactionData),
-					value: transactionData.transactionData,
+					type: typeof bytesToSign,
+					isArray: Array.isArray(bytesToSign),
+					value: bytesToSign,
 					keys: transactionData ? Object.keys(transactionData) : [],
 				});
 				throw new Error(
-					`Invalid transaction data format: ${typeof transactionData.transactionData}. Expected Uint8Array, number array, or hex string.`
+					`Invalid transaction data format: ${typeof bytesToSign}. Expected Uint8Array, number array, or hex string.`
 				);
 			}
 
 			console.log('✅ Transaction bytes converted:', {
 				length: transactionBytes.length,
-				firstBytes: Array.from(transactionBytes.slice(0, 10)),
+				firstBytes: Array.from(transactionBytes.slice(0, 20)),
+				lastBytes: Array.from(transactionBytes.slice(-10)),
+				bytesHex: Array.from(transactionBytes.slice(0, 30)).map(b => b.toString(16).padStart(2, '0')).join(''),
+				isBodyData: walletType === 'walletconnect' && !!transactionData.transactionBodyData
 			});
 
 			// Step 1: Use global wallet state first (if WalletConnect)
@@ -409,6 +426,18 @@ export function SwapInterface() {
 						'✅ Transaction signed successfully via global WalletConnect state:',
 						signature
 					);
+					
+					// Log detailed signature info
+					console.log('📝 Signature details:', {
+						hasSignature: !!signature.signature,
+						hasSignatureMap: !!signature.signatureMap,
+						hasSignedTransactionBytes: !!signature.signedTransactionBytes,
+						signedTransactionBytesType: typeof signature.signedTransactionBytes,
+						signedTransactionBytesIsArray: Array.isArray(signature.signedTransactionBytes),
+						accountId: signature.accountId,
+						transactionId: signature.transactionId,
+						fullSignature: signature
+					});
 
 					// Validate signature response
 					if (!signature || (!signature.signature && !signature.signatureMap)) {
@@ -1068,7 +1097,7 @@ export function SwapInterface() {
 							</p>
 							<p className="text-xs text-gray-300">Network: Hedera Testnet</p>
 							<p className="text-xs text-gray-300">
-								✅ Supports HashPack, Blade, Yamgo
+								✅ Supports HashPack, Blade, Yamgo, WalletConnect
 							</p>
 							<p className="text-xs text-gray-300">
 								✅ HBAR is debited from YOUR wallet

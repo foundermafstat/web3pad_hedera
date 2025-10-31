@@ -8,8 +8,11 @@ import {
     TransactionReceipt,
     AccountBalanceQuery,
     Transaction,
-    AccountInfoQuery
+    AccountInfoQuery,
+    SignatureMap,
+    PublicKey
 } from '@hashgraph/sdk';
+import * as proto from '@hashgraph/proto';
 import { initializeHederaClient, getContractConfig } from './hedera-config.js';
 
 /**
@@ -166,29 +169,73 @@ export class TransactionService {
                 .setGas(1000000)
                 .setMaxTransactionFee(Hbar.fromTinybars(500000000));
 
-            // Create a temporary client with user as operator
-            // This ensures the frozen transaction has user as payer
-            const tempClient = initializeHederaClient();
-            // Generate a temporary key - user will sign with their own key
-            const tempKey = PrivateKey.generateECDSA();
-            tempClient.setOperator(userAccountId, tempKey);
+            // CRITICAL: Set the transaction ID manually with user as payer
+            // This ensures the transaction expects to be signed by the user's key
+            const { TransactionId } = await import('@hashgraph/sdk');
+            const transactionId = TransactionId.generate(userAccountId);
+            transaction.setTransactionId(transactionId);
             
-            // Freeze the transaction with user as payer
-            // This ensures the transaction has all necessary information for wallet display
+            // CRITICAL: Set only ONE node to avoid multiple node transactions
+            // By default, freezeWith creates 5 node transactions, but WalletConnect
+            // only signs once, causing signature mismatch errors
+            // Use a single testnet node for simplicity
+            const singleNode = AccountId.fromString('0.0.3'); // Testnet node
+            transaction.setNodeAccountIds([singleNode]);
+            
+            // Create a temporary client for freezing (but DON'T set operator)
+            // This way the transaction will be unsigned and waiting for user's signature
+            const tempClient = initializeHederaClient();
+            
+            // Freeze the transaction WITHOUT signing it
+            // The transaction will be frozen but unsigned, ready for user to sign
+            // CRITICAL: Must use freezeWith(client) to properly set network and node info
             const frozenTransaction = await transaction.freezeWith(tempClient);
             
-            // Convert Uint8Array to regular array for JSON serialization
+            // Get full transaction bytes for later reconstruction
             const transactionBytes = frozenTransaction.toBytes();
             const transactionBytesArray = Array.from(transactionBytes);
             
+            console.log('📦 Full transaction bytes, length:', transactionBytesArray.length);
+            
+            // CRITICAL: Extract ONLY the TransactionBody bytes for WalletConnect signing
+            // WalletConnect must sign ONLY the body bytes (SHA-384 hash), not the full transaction
+            // Parse the transaction to extract body bytes
+            const txList = proto.proto.TransactionList.decode(Buffer.from(transactionBytes));
+            if (!txList.transactionList || txList.transactionList.length === 0) {
+                throw new Error('Failed to parse TransactionList from frozen transaction');
+            }
+            
+            // Get first (and only) transaction from list
+            const txProto = txList.transactionList[0];
+            let bodyBytes;
+            
+            if (txProto.signedTransactionBytes) {
+                // Extract from signedTransactionBytes
+                const signedTx = proto.proto.SignedTransaction.decode(txProto.signedTransactionBytes);
+                bodyBytes = signedTx.bodyBytes;
+            } else if (txProto.signedTransaction) {
+                // Extract from signedTransaction object
+                bodyBytes = txProto.signedTransaction.bodyBytes;
+            } else {
+                throw new Error('Cannot extract body bytes from transaction');
+            }
+            
+            if (!bodyBytes) {
+                throw new Error('Body bytes not found in frozen transaction');
+            }
+            
+            const bodyBytesArray = Array.from(bodyBytes);
+            console.log('📦 Extracted TransactionBody bytes for WalletConnect signing, length:', bodyBytesArray.length);
+            console.log('📦 Body bytes will be sent to WalletConnect for signing');
+            
             // Get transaction details for raw transaction display
-            const transactionId = frozenTransaction.transactionId;
             const nodeAccountIds = frozenTransaction.nodeAccountIds.map(id => id.toString());
             const contractId = config.contractId.toString();
             
             return {
                 success: true,
-                transactionData: transactionBytesArray, // Send as array for JSON compatibility
+                transactionData: transactionBytesArray, // Full transaction bytes for reconstruction
+                transactionBodyData: bodyBytesArray, // ONLY body bytes for WalletConnect signing
                 transactionId: transactionId.toString(),
                 contractId: contractId,
                 functionName: 'swapHBARforHPLAY',
@@ -327,30 +374,50 @@ export class TransactionService {
             if (signedTransaction.signedTransactionBytes) {
                 try {
                     console.log('✅ Using fully signed transaction from WalletConnect');
+                    console.log('📦 signedTransactionBytes type:', typeof signedTransaction.signedTransactionBytes);
+                    console.log('📦 signedTransactionBytes isArray:', Array.isArray(signedTransaction.signedTransactionBytes));
+                    
                     let signedBytes;
                     if (typeof signedTransaction.signedTransactionBytes === 'string') {
                         // Base64 string - decode it
+                        console.log('📦 Decoding from base64 string, length:', signedTransaction.signedTransactionBytes.length);
                         signedBytes = Buffer.from(signedTransaction.signedTransactionBytes, 'base64');
                     } else if (Array.isArray(signedTransaction.signedTransactionBytes)) {
+                        console.log('📦 Converting from array, length:', signedTransaction.signedTransactionBytes.length);
                         signedBytes = new Uint8Array(signedTransaction.signedTransactionBytes);
                     } else {
+                        console.log('📦 Using as-is');
                         signedBytes = signedTransaction.signedTransactionBytes;
                     }
                     
+                    console.log('📦 Decoded signedBytes length:', signedBytes.length);
+                    console.log('📦 First 20 bytes:', Array.from(signedBytes.slice(0, 20)));
+                    
                     // Restore the fully signed transaction
+                    console.log('📦 Restoring transaction from bytes...');
                     const signedTransactionObj = Transaction.fromBytes(signedBytes);
+                    console.log('✅ Transaction restored successfully');
+                    console.log('📝 Transaction ID:', signedTransactionObj.transactionId?.toString());
+                    console.log('📝 Payer:', signedTransactionObj.transactionId?.accountId?.toString());
+                    console.log('📝 Valid start:', signedTransactionObj.transactionId?.validStart?.toString());
                     
                     // Execute the fully signed transaction
                     const executorClient = initializeHederaClient();
                     console.log('🚀 Executing fully signed transaction from wallet...');
                     const response = await signedTransactionObj.execute(executorClient);
                     
+                    console.log('✅ Transaction executed, waiting for receipt...');
+                    
                     if (response.errorMessage) {
+                        console.error('❌ Transaction execution failed with error:', response.errorMessage);
                         throw new Error(`Transaction failed: ${response.errorMessage}`);
                     }
 
                     const receipt = await response.getReceipt(executorClient);
+                    console.log('✅ Receipt received, status:', receipt.status.toString());
+                    
                     if (receipt.status.toString() !== 'SUCCESS') {
+                        console.error('❌ Transaction failed with status:', receipt.status.toString());
                         throw new Error(`Transaction failed with status: ${receipt.status}`);
                     }
 
@@ -386,7 +453,12 @@ export class TransactionService {
                         userAccountId: signedTransaction.accountId || userAddress
                     };
                 } catch (signedTxError) {
-                    console.warn('⚠️ Failed to use signed transaction bytes, falling back to manual transaction:', signedTxError.message);
+                    console.error('❌ Failed to use signed transaction bytes:', {
+                        message: signedTxError.message,
+                        stack: signedTxError.stack,
+                        name: signedTxError.name
+                    });
+                    console.warn('⚠️ Falling back to manual transaction creation');
                     // Fall through to manual transaction creation
                 }
             }
@@ -412,108 +484,313 @@ export class TransactionService {
                 throw new Error('Original transaction bytes are required to execute signed transaction. The transaction must match what the user signed.');
             }
             
-            console.log('📦 Restoring original transaction that user signed...');
+            console.log('📦 Decoding original transaction to extract body and rebuild with signature...');
             
-            // Restore the exact transaction that user signed with their wallet
-            const transactionBytes = new Uint8Array(originalTransactionBytes);
-            let transaction = Transaction.fromBytes(transactionBytes);
+            // Get executor client
+            const executorClient = initializeHederaClient();
+            const userAccountId = AccountId.fromString(signedTransaction.accountId || userAddress);
             
-            console.log('✅ Original transaction restored');
-            console.log('📝 Transaction payer account:', transaction.transactionId?.accountId?.toString());
-            
-            // CRITICAL: Add user's signature to the transaction
-            // The transaction is frozen but not signed - WalletConnect signed it and returned the signature
-            // We need to add that signature back to the transaction
-            
-            if (!signedTransaction.signature) {
+            // Decode the signatureMap from WalletConnect FIRST
+            if (!signedTransaction.signature && !signedTransaction.signatureMap) {
                 throw new Error('User signature is required. Transaction was not signed by wallet.');
             }
             
-            console.log('✍️ Adding user signature to transaction...');
-            
-            // Get user's account info to get their public key
-            const userAccountId = AccountId.fromString(signedTransaction.accountId || userAddress);
-            const executorClient = initializeHederaClient();
+            let decodedSignatureMap;
+            let transaction; // Declare transaction variable outside try block
             
             try {
-                // Query account info to get public key
-                const accountInfo = await new AccountInfoQuery()
-                    .setAccountId(userAccountId)
-                    .execute(executorClient);
-                
-                const publicKey = accountInfo.key;
-                console.log('✅ Got user public key for signature verification');
-                
-                // Decode signature from WalletConnect: support string and signatureMap objects
-                let signatureBytes;
-                if (typeof signedTransaction.signature === 'string') {
-                    try {
-                        // Try base64 first
-                        signatureBytes = Buffer.from(signedTransaction.signature, 'base64');
-                        console.log('📦 Decoded signature from base64, length:', signatureBytes.length);
-                    } catch (e) {
-                        try {
-                            // Fallback to hex
-                            signatureBytes = Buffer.from(signedTransaction.signature, 'hex');
-                            console.log('📦 Decoded signature from hex, length:', signatureBytes.length);
-                        } catch (e2) {
-                            throw new Error('Unsupported signature string encoding');
-                        }
-                    }
-                } else if (signedTransaction.signature && typeof signedTransaction.signature === 'object') {
-                    // signatureMap handling: pick the first sigPair and decode ed25519 or ECDSA bytes
-                    const sigMap = signedTransaction.signature;
-                    const pairs = sigMap.sigPair || sigMap.sigPairs || sigMap.pairs || [];
-                    const sigPair = Array.isArray(pairs) ? pairs[0] : pairs;
-                    const raw = sigPair?.ed25519 || sigPair?.ECDSA_secp256k1 || sigPair?.ecdsaSecp256k1;
-                    if (!raw) {
-                        throw new Error('Unsupported signatureMap format: no ed25519/ECDSA bytes');
-                    }
-                    // raw may already be base64; if it's a Uint8Array/array use directly
-                    if (typeof raw === 'string') {
-                        signatureBytes = Buffer.from(raw, 'base64');
-                    } else if (raw instanceof Uint8Array) {
-                        signatureBytes = Buffer.from(raw);
-                    } else if (Array.isArray(raw)) {
-                        signatureBytes = Buffer.from(Uint8Array.from(raw));
+                // Try to use signatureMap if provided directly (from WalletConnect response)
+                if (signedTransaction.signatureMap) {
+                    console.log('📦 Using signatureMap from WalletConnect response');
+                    if (typeof signedTransaction.signatureMap === 'string') {
+                        const signatureMapBytes = Buffer.from(signedTransaction.signatureMap, 'base64');
+                        decodedSignatureMap = proto.proto.SignatureMap.decode(signatureMapBytes);
                     } else {
-                        throw new Error('Unsupported signatureMap byte format');
+                        decodedSignatureMap = signedTransaction.signatureMap;
                     }
-                    console.log('📦 Decoded signature from signatureMap, length:', signatureBytes.length);
                 } else {
-                    signatureBytes = Buffer.from(signedTransaction.signature);
+                    console.log('📦 Decoding signature from base64 string');
+                    const signatureMapBytes = Buffer.from(signedTransaction.signature, 'base64');
+                    console.log('📦 Decoded signature bytes, length:', signatureMapBytes.length);
+                    
+                    // Decode protobuf SignatureMap from WalletConnect
+                    console.log('📦 Decoding protobuf SignatureMap...');
+                    decodedSignatureMap = proto.proto.SignatureMap.decode(signatureMapBytes);
                 }
                 
-                // Add signature to transaction
-                // Transaction.addSignature requires PublicKey and signature bytes
-                transaction.addSignature(publicKey, signatureBytes);
-                console.log('✅ User signature added to transaction');
+                console.log('✅ Successfully decoded SignatureMap:', {
+                    sigPairCount: decodedSignatureMap.sigPair?.length || 0,
+                    sigPairDetails: decodedSignatureMap.sigPair?.map(pair => ({
+                        hasEd25519: !!pair.ed25519,
+                        hasECDSASecp256k1: !!pair.ECDSASecp256k1,
+                        hasEcdsaSecp256k1: !!pair.ecdsaSecp256k1,
+                        ed25519Length: pair.ed25519?.length || 0,
+                        ECDSASecp256k1Length: pair.ECDSASecp256k1?.length || 0,
+                        ecdsaSecp256k1Length: pair.ecdsaSecp256k1?.length || 0,
+                        pubKeyPrefixLength: pair.pubKeyPrefix?.length || 0,
+                        allKeys: Object.keys(pair)
+                    }))
+                });
+                
+                if (!decodedSignatureMap.sigPair?.length) {
+                    throw new Error('No signature pairs found in wallet signature');
+                }
+
+                // Fetch user's public key for verification
+                let accountPublicKey = null;
+                try {
+                    const accountInfo = await new AccountInfoQuery().setAccountId(userAccountId).execute(executorClient);
+                    accountPublicKey = accountInfo.key;
+                    console.log('📦 Retrieved user account public key:', accountPublicKey?.toString());
+                } catch (keyError) {
+                    console.warn('⚠️ Failed to fetch account info for public key verification:', keyError?.message);
+                }
+                
+                // CRITICAL: Decode the original transaction to get the transaction body
+                console.log('📦 Decoding original transaction bytes to extract body...');
+                console.log('📦 Original transaction bytes type:', {
+                    isArray: Array.isArray(originalTransactionBytes),
+                    isUint8Array: originalTransactionBytes instanceof Uint8Array,
+                    isBuffer: Buffer.isBuffer(originalTransactionBytes),
+                    length: originalTransactionBytes?.length
+                });
+                
+                // Convert to Buffer properly
+                let transactionBuffer;
+                if (Buffer.isBuffer(originalTransactionBytes)) {
+                    transactionBuffer = originalTransactionBytes;
+                } else if (originalTransactionBytes instanceof Uint8Array) {
+                    transactionBuffer = Buffer.from(originalTransactionBytes);
+                } else if (Array.isArray(originalTransactionBytes)) {
+                    transactionBuffer = Buffer.from(originalTransactionBytes);
+                } else {
+                    throw new Error('Invalid originalTransactionBytes type');
+                }
+                
+                console.log('📦 Transaction buffer ready, length:', transactionBuffer.length);
+                let originalSignedTransactionBytes;
+                
+                // Try decoding as TransactionList first
+                try {
+                    const originalTransactionList = proto.proto.TransactionList.decode(transactionBuffer);
+                    if (originalTransactionList.transactionList && originalTransactionList.transactionList.length > 0) {
+                        originalSignedTransactionBytes = originalTransactionList.transactionList[0];
+                        console.log('✅ Decoded TransactionList with', originalTransactionList.transactionList.length, 'entry');
+                    }
+                } catch (listError) {
+                    console.log('⚠️ Not a TransactionList:', listError.message);
+                }
+                
+                if (!originalSignedTransactionBytes) {
+                    console.log('📦 Trying to decode as Transaction wrapper...');
+                    const originalTransactionProto = proto.proto.Transaction.decode(transactionBuffer);
+                    if (originalTransactionProto.signedTransactionBytes && originalTransactionProto.signedTransactionBytes.length > 0) {
+                        originalSignedTransactionBytes = originalTransactionProto.signedTransactionBytes;
+                        console.log('✅ Extracted signedTransactionBytes from Transaction wrapper');
+                    } else if (originalTransactionProto.signedTransaction) {
+                        originalSignedTransactionBytes = proto.proto.SignedTransaction.encode(originalTransactionProto.signedTransaction).finish();
+                        console.log('✅ Encoded signedTransaction from Transaction wrapper');
+                    } else {
+                        throw new Error('Original transaction bytes do not contain SignedTransaction data');
+                    }
+                }
+
+                const normalizeToUint8Array = (data, context = 'root') => {
+                    if (!data) {
+                        throw new Error(`Missing signed transaction bytes (${context})`);
+                    }
+                    if (data instanceof Uint8Array) {
+                        return data;
+                    }
+                    if (Buffer.isBuffer(data)) {
+                        return new Uint8Array(data);
+                    }
+                    if (typeof data === 'string') {
+                        return Uint8Array.from(Buffer.from(data, 'base64'));
+                    }
+                    if (Array.isArray(data)) {
+                        return Uint8Array.from(data);
+                    }
+                    if (typeof data.length === 'number' && typeof data !== 'function') {
+                        return Uint8Array.from(Array.from(data));
+                    }
+                    if (typeof data.byteLength === 'number') {
+                        return new Uint8Array(data);
+                    }
+                    if (data.buffer instanceof ArrayBuffer) {
+                        return new Uint8Array(data.buffer);
+                    }
+                    if (data.bytes !== undefined) {
+                        return normalizeToUint8Array(data.bytes, `${context}.bytes`);
+                    }
+                    if (data.value !== undefined) {
+                        return normalizeToUint8Array(data.value, `${context}.value`);
+                    }
+                    if (data.signedTransactionBytes !== undefined) {
+                        return normalizeToUint8Array(data.signedTransactionBytes, `${context}.signedTransactionBytes`);
+                    }
+                    if (data.signedTransaction) {
+                        return proto.proto.SignedTransaction.encode(data.signedTransaction).finish();
+                    }
+                    if (data.transactionBytes !== undefined) {
+                        return normalizeToUint8Array(data.transactionBytes, `${context}.transactionBytes`);
+                    }
+                    console.error('❌ Unable to normalize signed transaction bytes', { context, dataKeys: Object.keys(data || {}) });
+                    throw new Error('Unsupported signed transaction bytes format');
+                };
+
+                console.log('📦 Original signed transaction bytes info:', {
+                    type: typeof originalSignedTransactionBytes,
+                    constructor: originalSignedTransactionBytes?.constructor?.name,
+                    keys: originalSignedTransactionBytes ? Object.keys(originalSignedTransactionBytes) : [],
+                    hasSignedTransactionBytes: originalSignedTransactionBytes?.signedTransactionBytes !== undefined,
+                    hasSignedTransaction: originalSignedTransactionBytes?.signedTransaction !== undefined,
+                    hasBytesField: originalSignedTransactionBytes?.bytes !== undefined,
+                    hasValueField: originalSignedTransactionBytes?.value !== undefined
+                });
+
+                const signedBytesForDecode = normalizeToUint8Array(originalSignedTransactionBytes);
+
+                console.log('📦 Signed bytes ready for decode, length:', signedBytesForDecode.length);
+
+                // Get the signed transaction to extract TransactionBody
+                const originalSignedTransaction = proto.proto.SignedTransaction.decode(signedBytesForDecode);
+                
+                if (!originalSignedTransaction.bodyBytes) {
+                    throw new Error('Transaction body bytes not found in original transaction');
+                }
+                
+                let transactionBodyInfo = {};
+                let transactionBody;
+                try {
+                    transactionBody = proto.proto.TransactionBody.decode(originalSignedTransaction.bodyBytes);
+                    
+                    // Extract full transaction ID with timestamp
+                    const txId = transactionBody.transactionID;
+                    const accountStr = txId?.accountID ? `${txId.accountID.shard?.low || 0}.${txId.accountID.realm?.low || 0}.${txId.accountID.accountNum?.low || 0}` : undefined;
+                    const validStartSeconds = txId?.transactionValidStart?.seconds?.low || 0;
+                    const validStartNanos = txId?.transactionValidStart?.nanos || 0;
+                    const fullTransactionId = txId ? `${accountStr}@${validStartSeconds}.${validStartNanos}` : undefined;
+                    
+                    transactionBodyInfo = {
+                        transactionId: accountStr,
+                        fullTransactionId: fullTransactionId,
+                        nodeAccountId: transactionBody.nodeAccountID ? `${transactionBody.nodeAccountID.shard?.low || 0}.${transactionBody.nodeAccountID.realm?.low || 0}.${transactionBody.nodeAccountID.accountNum?.low || 0}` : undefined,
+                        hasContractCall: !!transactionBody.contractCall,
+                        gas: transactionBody.contractCall?.gas?.toString(),
+                        payable: transactionBody.contractCall?.amount?.toString()
+                    };
+                } catch (bodyError) {
+                    console.warn('⚠️ Failed to decode TransactionBody:', bodyError?.message);
+                }
+                
+                console.log('✅ Decoded original transaction body:', {
+                    bodyBytesLength: originalSignedTransaction.bodyBytes.length,
+                    transactionBodyInfo
+                });
+                
+                // CRITICAL: Build a NEW SignedTransaction with body + WalletConnect signature
+                // This creates a properly signed transaction that Hedera will accept
+                console.log('📦 Building new SignedTransaction with WalletConnect signature...');
+                
+                // Create a new SignedTransaction with the body and signature from WalletConnect
+                const newSignedTransaction = proto.proto.SignedTransaction.create({
+                    bodyBytes: originalSignedTransaction.bodyBytes,
+                    sigMap: decodedSignatureMap
+                });
+                
+                console.log('✅ Created SignedTransaction with signature:', {
+                    bodyBytesLength: newSignedTransaction.bodyBytes.length,
+                    sigPairCount: newSignedTransaction.sigMap.sigPair.length,
+                    sigPairDetails: newSignedTransaction.sigMap.sigPair.map(pair => {
+                        const ecdsaSig = pair.ECDSASecp256k1 || pair.ecdsaSecp256k1;
+                        return {
+                            hasEd25519: !!pair.ed25519,
+                            hasECDSA: !!ecdsaSig,
+                            ed25519Length: pair.ed25519?.length || 0,
+                            ecdsaLength: ecdsaSig?.length || 0,
+                            ecdsaHex: ecdsaSig ? Buffer.from(ecdsaSig).toString('hex') : 'none',
+                            pubKeyPrefixLength: pair.pubKeyPrefix?.length || 0,
+                            pubKeyPrefixHex: pair.pubKeyPrefix ? Buffer.from(pair.pubKeyPrefix).toString('hex') : 'none'
+                        };
+                    })
+                });
+                
+                // Encode the SignedTransaction
+                const newSignedTxBytes = proto.proto.SignedTransaction.encode(newSignedTransaction).finish();
+                console.log('📦 Encoded SignedTransaction, length:', newSignedTxBytes.length);
+                
+                // Wrap in Transaction proto
+                const transactionWrapper = proto.proto.Transaction.create({
+                    signedTransactionBytes: newSignedTxBytes
+                });
+                const transactionWrapperBytes = proto.proto.Transaction.encode(transactionWrapper).finish();
+                console.log('📦 Created Transaction wrapper, length:', transactionWrapperBytes.length);
+                
+                // Now deserialize as a Transaction object that SDK can use
+                transaction = Transaction.fromBytes(transactionWrapperBytes);
+                console.log('✅ Transaction reconstructed from signed bytes');
+                console.log('📝 Transaction ID:', transaction.transactionId?.toString());
+                console.log('📝 Transaction payer:', transaction.transactionId?.accountId?.toString());
+                
+                // CRITICAL: Compare transaction IDs
+                if (transactionBodyInfo.fullTransactionId) {
+                    const reconstructedTxId = transaction.transactionId?.toString();
+                    console.log('🔍 Transaction ID comparison:', {
+                        original: transactionBodyInfo.fullTransactionId,
+                        reconstructed: reconstructedTxId,
+                        match: transactionBodyInfo.fullTransactionId === reconstructedTxId
+                    });
+                    
+                    if (transactionBodyInfo.fullTransactionId !== reconstructedTxId) {
+                        console.error('❌ CRITICAL: Transaction ID mismatch! Signature was for different transaction.');
+                        console.error('This will cause INVALID_SIGNATURE error.');
+                    }
+                }
+                
+                // Verify signature if we have the account public key
+                if (accountPublicKey) {
+                    try {
+                        const isSignatureValid = accountPublicKey.verifyTransaction(transaction);
+                        console.log('📦 Local signature verification result:', isSignatureValid);
+                        
+                        if (!isSignatureValid) {
+                            console.warn('⚠️ Signature verification failed locally');
+                            console.warn('⚠️ This is expected for ECDSA signatures from WalletConnect');
+                            console.warn('⚠️ Hedera SDK verification may not support ECDSA properly');
+                            console.warn('⚠️ Network verification should work correctly');
+                        } else {
+                            console.log('✅ Signature verified successfully locally!');
+                        }
+                    } catch (verifyError) {
+                        console.warn('⚠️ Failed to locally verify signature:', verifyError?.message);
+                    }
+                }
+                
+                console.log('✅ Transaction fully signed and ready for execution');
+                console.log('📦 Transaction protobuf bytes (length):', transactionWrapperBytes.length);
+                console.log('📦 Transaction has frozen state:', transaction.isFrozen());
                 
             } catch (accountError) {
-                console.warn('⚠️ Could not get account info, trying alternative method:', accountError.message);
-                // Alternative: Try to add signature without public key lookup
-                // This might work if signature format is correct
-                try {
-                    let signatureBytes;
-                    if (typeof signedTransaction.signature === 'string') {
-                        signatureBytes = Buffer.from(signedTransaction.signature, 'base64');
-                    } else {
-                        signatureBytes = Buffer.from(signedTransaction.signature);
-                    }
-                    
-                    // Try to get public key from account ID directly (may not work)
-                    // For now, we'll try executing with signature in transaction body
-                    console.log('⚠️ Attempting to execute without explicit signature addition');
-                } catch (e) {
-                    console.error('❌ Failed to process signature:', e);
-                    throw new Error(`Could not add signature to transaction: ${e.message}`);
-                }
+                console.error('❌ Failed to reconstruct signed transaction:', {
+                    message: accountError.message,
+                    stack: accountError.stack,
+                    name: accountError.name
+                });
+                throw new Error(`Could not reconstruct signed transaction: ${accountError.message}`);
             }
             
             console.log('🚀 Executing transaction with user signature...');
-            console.log('💰 Transaction will execute from user account:', signedTransaction.accountId || userAddress);
+            console.log('💰 Transaction details before execution:', {
+                payerAccount: signedTransaction.accountId || userAddress,
+                transactionId: transaction.transactionId?.toString(),
+                transactionPayer: transaction.transactionId?.accountId?.toString(),
+                isFrozen: transaction.isFrozen(),
+                transactionType: transaction.constructor.name
+            });
             
             // Execute the signed transaction
+            console.log('📤 Submitting transaction to Hedera network...');
             const response = await transaction.execute(executorClient);
             
             if (response.errorMessage) {

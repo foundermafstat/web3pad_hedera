@@ -476,7 +476,9 @@ export class HederaService {
         console.log('[HederaService] Transaction bytes prepared:', {
           originalLength: transactionBytes.length,
           base64Length: base64String.length,
-          firstBytes: Array.from(transactionBytes.slice(0, 10))
+          firstBytes: Array.from(transactionBytes.slice(0, 20)),
+          lastBytes: Array.from(transactionBytes.slice(-20)),
+          bytesHex: Array.from(transactionBytes.slice(0, 50)).map(b => b.toString(16).padStart(2, '0')).join('')
         });
 
         // Use DAppConnector signTransaction method
@@ -495,9 +497,11 @@ export class HederaService {
         let signResult: any;
         let lastError: any;
         
-        // Try transactionBody with base64 string (primary format)
+        // CRITICAL: WalletConnect expects the COMPLETE Transaction protobuf message
+        // NOT just the TransactionBody - parameter name is misleading
+        // Try transactionBody with base64 string (primary format - despite name, it expects full transaction)
         try {
-          console.log('[HederaService] Attempting signTransaction with transactionBody (base64)...');
+          console.log('[HederaService] Attempting signTransaction with transactionBody parameter (full tx base64)...');
           signResult = await this.dAppConnector.signTransaction({
             signerAccountId: fullAddress,
             transactionBody: base64String,
@@ -506,6 +510,7 @@ export class HederaService {
         } catch (error1: any) {
           lastError = error1;
           console.warn('[HederaService] transactionBody format failed:', error1.message);
+          console.warn('[HederaService] Error details:', error1);
           
           // Fallback: try with transactionBytes (base64 string)
           try {
@@ -529,6 +534,11 @@ export class HederaService {
               console.log('[HederaService] Success with transactionBytes (array) format');
             } catch (error3: any) {
               lastError = error3;
+              console.error('[HederaService] All formats failed. Full errors:', {
+                error1: error1?.message,
+                error2: error2?.message,
+                error3: error3?.message
+              });
               throw new Error(`All signing formats failed. Last error: ${error3.message}. Ensure transaction is base64 encoded.`);
             }
           }
@@ -541,6 +551,9 @@ export class HederaService {
           hasTransactionId: !!(signResult?.result?.transactionId || signResult?.transactionId),
           fullResult: signResult // Log full result to see what WalletConnect returns
         });
+        
+        // Log detailed structure to understand what WalletConnect returns
+        console.log('[HederaService] Detailed signResult structure:', JSON.stringify(signResult, null, 2).substring(0, 1000));
 
         // Check if WalletConnect returned a fully signed transaction
         const signedTransactionBytes = signResult?.result?.signedTransaction || 
@@ -549,8 +562,26 @@ export class HederaService {
                                        signResult?.transactionBytes ||
                                        null;
 
+        // Extract signature in different formats that WalletConnect might return
+        const signatureMap = signResult?.result?.signatureMap || signResult?.signatureMap || null;
+        const signature = signResult?.result?.signature || signResult?.signature || null;
+        
+        console.log('[HederaService] Returning signature data:', {
+          hasSignatureMap: !!signatureMap,
+          signatureMapType: typeof signatureMap,
+          hasSignature: !!signature,
+          signatureType: typeof signature,
+          hasSignedTransactionBytes: !!signedTransactionBytes,
+          signResultKeys: Object.keys(signResult || {}),
+          signResultResultKeys: Object.keys(signResult?.result || {})
+        });
+        
+        // Prefer signatureMap, fallback to signature
+        const primarySignature = signatureMap || signature;
+        
         return {
-          signature: signResult?.result?.signatureMap || signResult?.signatureMap || signResult?.signature || '',
+          signature: primarySignature,
+          signatureMap: signatureMap, // Include signatureMap separately if available
           accountId: accountId,
           transactionId: signResult?.result?.transactionId || signResult?.transactionId || '',
           walletType: 'walletconnect',
