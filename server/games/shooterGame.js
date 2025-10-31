@@ -3,10 +3,26 @@ import { resultVerifierService } from '../lib/result-verifier-service.js';
 
 // Класс игрока для шутера
 class Player {
-	constructor(id, name, worldWidth, worldHeight, playerSize, color, walletAddress = null) {
+	constructor(
+		id,
+		name,
+		worldWidth,
+		worldHeight,
+		playerSize,
+		color,
+		walletAddress = null,
+		hederaAccountId = null
+	) {
 		this.id = id;
 		this.name = name;
 		this.walletAddress = walletAddress; // Blockchain wallet address
+		this.hederaAccountId = hederaAccountId; // Hedera account id (0.0.x)
+		if (typeof this.walletAddress === 'string') {
+			this.walletAddress = this.walletAddress.trim();
+		}
+		if (typeof this.hederaAccountId === 'string') {
+			this.hederaAccountId = this.hederaAccountId.trim();
+		}
 		this.x = worldWidth / 2 - playerSize / 2 + (Math.random() - 0.5) * 100;
 		this.y = worldHeight / 2 - playerSize / 2 + (Math.random() - 0.5) * 100;
 		this.health = 100;
@@ -261,6 +277,7 @@ class Player {
 			id: this.id,
 			name: this.name,
 			walletAddress: this.walletAddress,
+			hederaAccountId: this.hederaAccountId,
 			x: this.x,
 			y: this.y,
 			alive: this.alive,
@@ -525,6 +542,7 @@ export class ShooterGame extends BaseGame {
 			accuracy,
 			finalScore: player.finalScore,
 			livesRemaining: player.lives,
+			hederaAccountId: player.hederaAccountId,
 		};
 	}
 
@@ -533,28 +551,39 @@ export class ShooterGame extends BaseGame {
 		if (!player) {
 			return null;
 		}
+	if (!player.hederaAccountId && signaturePayload?.hederaAccountId) {
+		player.hederaAccountId = signaturePayload.hederaAccountId;
+	}
 
 		player.resultSignature = {
 			...signaturePayload,
+		hederaAccountId: player.hederaAccountId,
 			recordedAt: Date.now(),
 		};
 
 		return player.resultSignature;
 	}
 
-	addPlayer(playerId, playerName, userId = null, walletAddress = null) {
+	addPlayer(
+		playerId,
+		playerName,
+		userId = null,
+		walletAddress = null,
+		hederaAccountId = null
+	) {
 		const color = this.playerColors[this.colorIndex % this.playerColors.length];
 		this.colorIndex++;
 
-		const player = new Player(
-			playerId,
-			playerName,
-			this.worldWidth,
-			this.worldHeight,
-			this.playerSize,
-			color,
-			walletAddress
-		);
+	const player = new Player(
+		playerId,
+		playerName,
+		this.worldWidth,
+		this.worldHeight,
+		this.playerSize,
+		color,
+		walletAddress,
+		hederaAccountId
+	);
 		player.userId = userId; // Store userId for database tracking
 
 		this.players.set(playerId, player);
@@ -819,6 +848,12 @@ export class ShooterGame extends BaseGame {
 		const metrics = this.getPlayerMetrics(player);
 		const moduleGameId = this.getModuleGameId();
 		const signaturePayload = player.resultSignature || null;
+		if (!player.hederaAccountId) {
+			console.warn(
+				`[ShooterGame] Hedera account missing for player ${playerId}; waiting for controller data before submitting result.`
+			);
+			return null;
+		}
 
 		if (!signaturePayload) {
 			console.warn('[ShooterGame] Result signature missing, awaiting controller confirmation for player', playerId);
@@ -834,6 +869,7 @@ export class ShooterGame extends BaseGame {
 					...metrics,
 					roomId: this.gameId,
 					playerId: player.id,
+					hederaAccountId: player.hederaAccountId,
 					playerSignature: signaturePayload,
 				},
 			});
@@ -843,6 +879,7 @@ export class ShooterGame extends BaseGame {
 				...submission,
 				score,
 				metrics,
+				hederaAccountId: player.hederaAccountId,
 			};
 
 			console.log('[ShooterGame] Game result submitted via ResultVerifier:', player.lastSubmission);

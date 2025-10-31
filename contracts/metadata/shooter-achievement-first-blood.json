@@ -1,0 +1,37 @@
+{
+	"name": "Shooter Achievement: First Blood",
+	"description": "Awarded for eliminating your first mob during a shooter session.",
+	"gameId": "shooter",
+	"type": "achievement",
+	"category": "progression",
+	"rarity": "common",
+	"image": "ipfs://QmXoEgRQ5N3T9p2ewZATkAi8j8krBk34nZFgSazaJ8GEYh",
+	"external_url": "https://web3pad.xyz/games/shooter",
+	"attributes": [
+		{
+			"trait_type": "Game",
+			"value": "Shooter"
+		},
+		{
+			"trait_type": "Achievement Type",
+			"value": "Progression"
+		},
+		{
+			"trait_type": "Requirement",
+			"value": "1 Mob Kill"
+		}
+	],
+	"criteria": {
+		"metric": "mobKills",
+		"operator": ">=",
+		"threshold": 1,
+		"window": "session"
+	},
+	"rewards": [
+		{
+			"type": "sbtStat",
+			"key": "shooterFirstKillUnlock",
+			"value": true
+		}
+	]
+}

@@ -1,0 +1,36 @@
+{
+	"name": "Shooter Weapon: Overclocked Pulse Carbine",
+	"description": "Overcharged pulse rifle that amplifies projectile damage for faster mob eliminations in shooter sessions.",
+	"gameId": "shooter",
+	"type": "item",
+	"category": "weapon",
+	"rarity": "epic",
+	"image": "ipfs://QmR3AHzdDYqhnwd6NNLbZoK38di8tvwRhVrvNp8JobiBjv",
+	"external_url": "https://web3pad.xyz/games/shooter",
+	"attributes": [
+		{
+			"trait_type": "Game",
+			"value": "Shooter"
+		},
+		{
+			"trait_type": "Item Type",
+			"value": "Weapon"
+		},
+		{
+			"trait_type": "Rarity",
+			"value": "Epic"
+		},
+		{
+			"trait_type": "Damage Bonus",
+			"value": "+50%"
+		}
+	],
+	"effects": [
+		{
+			"stat": "damagePerShot",
+			"type": "multiplier",
+			"value": 1.5,
+			"description": "Increases projectile damage by 50%, enabling single-hit mob eliminations."
+		}
+	]
+}

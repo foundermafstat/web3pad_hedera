@@ -433,7 +433,9 @@ io.on('connection', (socket) => {
 		}
 	});
 
-	socket.on('room:join', ({ roomId, playerName, password, walletAddress }) => {
+	socket.on(
+		'room:join',
+		({ roomId, playerName, password, walletAddress, hederaAccountId }) => {
 		try {
 			// Validate password if room has one
 			if (!roomManager.validateRoomPassword(roomId, password)) {
@@ -441,7 +443,13 @@ io.on('connection', (socket) => {
 				return;
 			}
 
-			const { room, playerData } = roomManager.joinRoom(roomId, socket, playerName, walletAddress);
+			const { room, playerData } = roomManager.joinRoom(
+				roomId,
+				socket,
+				playerName,
+				walletAddress,
+				hederaAccountId
+			);
 
 			socket.emit('room:joined', {
 				roomId,
@@ -453,12 +461,15 @@ io.on('connection', (socket) => {
 			// Broadcast updated room list
 			broadcastRoomList();
 
-			console.log(`[room:join] Player ${playerName} joined room ${roomId}, wallet: ${walletAddress || 'none'}`);
+			console.log(
+				`[room:join] Player ${playerName} joined room ${roomId}, wallet: ${walletAddress || 'none'}, hedera: ${hederaAccountId || 'none'}`
+			);
 		} catch (error) {
 			socket.emit('error', { message: error.message });
 			console.error('Error joining room:', error);
 		}
-	});
+	}
+	);
 
 	// Shooter game input handlers
 	socket.on('shooter:input', ({ input }) => {

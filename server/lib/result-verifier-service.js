@@ -108,6 +108,29 @@ class ResultVerifierService {
 		const signature = await this.wallet.signMessage(ethers.getBytes(messageHash));
 
 		const gasLimit = 1_200_000n;
+
+		try {
+			await this.contract.submitGameResult.staticCall(
+				normalizedAddress,
+				gameId,
+				scoreBigInt,
+				signature,
+				nextNonce,
+				timestamp,
+				{ gasLimit }
+			);
+		} catch (error) {
+			const reason = error?.reason || error?.shortMessage || error?.message || 'unknown';
+			console.error('[ResultVerifierService] Simulation failed:', {
+				reason,
+				playerAddress: normalizedAddress,
+				gameId,
+				score: scoreBigInt.toString(),
+				nonce: nextNonce.toString(),
+				timestamp: timestamp.toString(),
+			});
+			throw new Error(`ResultVerifier simulation reverted: ${reason}`);
+		}
 		const txResponse = await this.contract.submitGameResult(
 			normalizedAddress,
 			gameId,

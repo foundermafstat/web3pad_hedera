@@ -1,0 +1,36 @@
+{
+	"name": "Shooter Armor: Reactive Vest",
+	"description": "Reactive plating that disperses kinetic impact, reducing incoming damage throughout shooter encounters.",
+	"gameId": "shooter",
+	"type": "item",
+	"category": "armor",
+	"rarity": "rare",
+	"image": "ipfs://QmacGtqEpCkCFUv667nTN9MeNRHXEjue215LNSu9KeHPGR",
+	"external_url": "https://web3pad.xyz/games/shooter",
+	"attributes": [
+		{
+			"trait_type": "Game",
+			"value": "Shooter"
+		},
+		{
+			"trait_type": "Item Type",
+			"value": "Armor"
+		},
+		{
+			"trait_type": "Rarity",
+			"value": "Rare"
+		},
+		{
+			"trait_type": "Damage Reduction",
+			"value": "40%"
+		}
+	],
+	"effects": [
+		{
+			"stat": "incomingDamage",
+			"type": "multiplier",
+			"value": 0.6,
+			"description": "Reduces incoming damage by 40%, extending survivability per life."
+		}
+	]
+}

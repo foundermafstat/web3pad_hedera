@@ -1,6 +1,15 @@
 import { createGame, GAME_TYPES } from './games/index.js';
 import GameSessionManager from './lib/game-session-manager.js';
 
+const DEFAULT_HEDERA_ACCOUNT_ID =
+	process.env.GAME_SERVER_ACCOUNT_ID ||
+	process.env.DEFAULT_HEDERA_ACCOUNT_ID ||
+	'0.0.5911528';
+const DEFAULT_EVM_ADDRESS =
+	process.env.GAME_SERVER_ADDRESS ||
+	process.env.DEFAULT_EVM_ADDRESS ||
+	'0x3263874809c13d364dEA26a89b1232268935e8eC';
+
 // Менеджер игровых комнат
 class GameRoomManager {
 	constructor() {
@@ -108,11 +117,20 @@ class GameRoomManager {
 	}
 
 	// Присоединить игрока к комнате
-	joinRoom(roomId, socket, playerName, walletAddress = null) {
+joinRoom(roomId, socket, playerName, walletAddress = null, hederaAccountId = null) {
 		const room = this.rooms.get(roomId);
 		if (!room) {
 			throw new Error(`Room ${roomId} not found`);
 		}
+
+	const resolvedWallet =
+		typeof walletAddress === 'string' && walletAddress.trim().startsWith('0x')
+			? walletAddress.trim()
+			: DEFAULT_EVM_ADDRESS;
+	const resolvedHedera =
+		typeof hederaAccountId === 'string' && hederaAccountId.trim().includes('.')
+			? hederaAccountId.trim()
+			: DEFAULT_HEDERA_ACCOUNT_ID;
 
 		// Добавляем сокет в комнату (если еще не добавлен)
 		if (!room.sockets.has(socket)) {
@@ -124,12 +142,18 @@ class GameRoomManager {
 		const userId = socket.user?.userId || null;
 
 		// Проверяем, не добавлен ли уже игрок
-		if (room.game.players.has(socket.id)) {
+	if (room.game.players.has(socket.id)) {
 			const existingPlayer = room.game.players.get(socket.id);
 			if (existingPlayer?.gameOver) {
 				console.log(`[GameRoomManager] Resetting player ${playerName} for new session in room ${roomId}`);
 				room.game.players.delete(socket.id);
-				const resetData = room.game.addPlayer(socket.id, playerName, userId, walletAddress);
+				const resetData = room.game.addPlayer(
+					socket.id,
+					playerName,
+					userId,
+				resolvedWallet,
+				resolvedHedera
+				);
 				return { room, playerData: resetData };
 			}
 			console.log(`[GameRoomManager] Player ${playerName} already in room ${roomId}`);
@@ -137,7 +161,13 @@ class GameRoomManager {
 		}
 
 		// Добавляем игрока в игру с walletAddress
-		const playerData = room.game.addPlayer(socket.id, playerName, userId, walletAddress);
+	const playerData = room.game.addPlayer(
+		socket.id,
+		playerName,
+		userId,
+		resolvedWallet,
+		resolvedHedera
+	);
 
 		// Update room player count in database
 		if (room.info.hostUserId) {
@@ -145,7 +175,9 @@ class GameRoomManager {
 				.catch(err => console.error('[GameRoomManager] Error updating player count:', err));
 		}
 
-		console.log(`[GameRoomManager] Player ${playerName} (${socket.id}) joined room ${roomId}, userId: ${userId || 'guest'}, wallet: ${walletAddress || 'none'}`);
+	console.log(
+		`[GameRoomManager] Player ${playerName} (${socket.id}) joined room ${roomId}, userId: ${userId || 'guest'}, wallet: ${resolvedWallet}, hedera: ${resolvedHedera}`
+	);
 		return { room, playerData };
 	}
 
@@ -368,10 +400,14 @@ class GameRoomManager {
 				socket.emit('playerSignatureRecorded', {
 					playerId,
 					signature: result,
+					hederaAccountId: room.game.players.get(playerId)?.hederaAccountId || null,
 				});
 			});
 
 			const player = room.game.players.get(playerId);
+			if (player && !player.hederaAccountId && signaturePayload?.hederaAccountId) {
+				player.hederaAccountId = signaturePayload.hederaAccountId;
+			}
 			if (player?.gameOver && !player.resultSubmitted) {
 				room.game
 					.saveGameResultToBlockchain(playerId)
@@ -381,6 +417,7 @@ class GameRoomManager {
 								socket.emit('gameResultSubmitted', {
 									playerId,
 									blockchainResult,
+								hederaAccountId: player.hederaAccountId,
 								});
 							});
 						}

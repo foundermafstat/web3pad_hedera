@@ -16,6 +16,17 @@ import {
 import AuthModal from '../../AuthModal';
 import { useWallet } from '@/contexts/WalletContext';
 
+const DEFAULT_HEDERA_ACCOUNT_ID =
+	process.env.NEXT_PUBLIC_DEFAULT_HEDERA_ACCOUNT_ID || '0.0.5911528';
+const DEFAULT_EVM_ADDRESS =
+	process.env.NEXT_PUBLIC_DEFAULT_EVM_ADDRESS ||
+	'0x3263874809c13d364dEA26a89b1232268935e8eC';
+
+const isHederaAccountId = (value?: string | null) =>
+	Boolean(value && value.includes('.'));
+const isEvmAddress = (value?: string | null) =>
+	Boolean(value && value.startsWith('0x'));
+
 interface MobileControllerProps {
 	gameId: string;
 	gameType: string;
@@ -33,6 +44,7 @@ interface PlayerData {
 	aimDirection?: { x: number; y: number };
 	isMoving?: boolean;
 	walletAddress?: string | null;
+	hederaAccountId?: string | null;
 	kills?: number;
 	deaths?: number;
 	botKills?: number;
@@ -306,10 +318,23 @@ const MobileController: React.FC<MobileControllerProps> = ({
 				'gameId:',
 				gameId
 			);
+			const resolvedWalletAddress = isEvmAddress(walletAddress)
+				? walletAddress!
+				: DEFAULT_EVM_ADDRESS;
+			const resolvedHederaAccount = isHederaAccountId(walletAddress)
+				? walletAddress!
+				: DEFAULT_HEDERA_ACCOUNT_ID;
+			if (!isHederaAccountId(walletAddress)) {
+				console.warn(
+					'[ShooterController] Hedera account missing from wallet context; using default id',
+					resolvedHederaAccount
+				);
+			}
 			socketRef.current.emit('room:join', {
 				roomId: gameId,
 				playerName: playerName.trim(),
-				walletAddress: walletAddress || null,
+				walletAddress: resolvedWalletAddress,
+				hederaAccountId: resolvedHederaAccount,
 			});
 		}
 	};
@@ -334,12 +359,16 @@ const MobileController: React.FC<MobileControllerProps> = ({
 
 	const buildResultMessage = useCallback(() => {
 		if (!gameOverState) return '';
-		const wallet = walletAddress || gameOverState.player.walletAddress || '';
+		const resolvedWallet = isEvmAddress(walletAddress)
+			? walletAddress!
+			: isEvmAddress(gameOverState.player.walletAddress)
+			? gameOverState.player.walletAddress!
+			: DEFAULT_EVM_ADDRESS;
 		const parts = [
 			'ShooterResult',
 			gameId,
 			gameOverState.player.id,
-			wallet,
+			resolvedWallet,
 			String(gameOverState.finalScore ?? gameOverState.player.finalScore ?? 0),
 			String(gameOverState.player.kills ?? 0),
 			String(gameOverState.player.botKills ?? 0),
@@ -369,11 +398,31 @@ const MobileController: React.FC<MobileControllerProps> = ({
 			const signature = await signMessage(message);
 			setSignatureData(signature);
 
+			const resolvedWalletAddress = isEvmAddress(walletAddress)
+				? walletAddress!
+				: isEvmAddress(gameOverState.player.walletAddress)
+				? gameOverState.player.walletAddress!
+				: DEFAULT_EVM_ADDRESS;
+			const resolvedHederaAccount = isHederaAccountId(
+				gameOverState.player.hederaAccountId
+			)
+				? gameOverState.player.hederaAccountId!
+				: isHederaAccountId(walletAddress)
+				? walletAddress!
+				: DEFAULT_HEDERA_ACCOUNT_ID;
+
+			if (!isHederaAccountId(gameOverState.player.hederaAccountId)) {
+				console.warn(
+					'[ShooterController] Using fallback Hedera account for signature submission:',
+					resolvedHederaAccount
+				);
+			}
+
 			socketRef.current?.emit('shooter:resultSignature', {
 				roomId: gameId,
 				playerId: gameOverState.player.id,
-				walletAddress:
-					walletAddress || gameOverState.player.walletAddress || null,
+				walletAddress: resolvedWalletAddress,
+				hederaAccountId: resolvedHederaAccount,
 				message,
 				signatureMap: signature.signatureMap,
 				finalScore: gameOverState.finalScore,
