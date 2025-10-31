@@ -9,6 +9,9 @@ import { transactionService } from './transaction-service.js';
 export class ContractService {
     constructor() {
         this.client = initializeHederaClient();
+        // Cache for token balances to avoid rate limiting
+        this.balanceCache = new Map();
+        this.CACHE_TTL = 30000; // 30 seconds cache (increased to reduce spam)
     }
 
     getEthersContract(contractName) {
@@ -173,18 +176,15 @@ export class ContractService {
     /**
      * Get token balance for an account
      * @param {string} accountAddress Account address
-     * @returns {Promise<number>} Token balance
+     * @returns {Promise<number>} Token balance (in HPLAY, not smallest units)
      */
     async getTokenBalance(accountAddress) {
         try {
-            const ethereumAddress = this.validateAddress(accountAddress);
-            const result = await this.callContractFunction('TokenEconomy', 'balanceOf', [
-                new ContractFunctionParameters().addAddress(ethereumAddress)
-            ]);
-            
-            return result.getUint256(0).toNumber();
+            // Use RPC method (more reliable for token balance queries)
+            return await this.getTokenBalanceRpc(accountAddress);
         } catch (error) {
-            // Return 0 if contract call fails
+            console.error('Error getting token balance:', error);
+            // Return 0 if call fails
             return 0;
         }
     }
@@ -508,6 +508,72 @@ export class ContractService {
         const nowSec = Math.floor(Date.now() / 1000);
         const last = Number(lastSwapTimestamp) || 0;
         return nowSec - last >= 24 * 60 * 60;
+    }
+
+    /** TokenEconomy via JSON-RPC (ERC20 contract, not HTS token) **/
+    async getTokenBalanceRpc(userAddress) {
+        try {
+            // Check cache first
+            const cacheKey = `balance_${userAddress}`;
+            const cached = this.balanceCache.get(cacheKey);
+            if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {
+                return cached.balance;
+            }
+            
+            console.log(`[TokenBalance] Querying ERC20 balance for ${userAddress}`);
+            
+            // If address is Hedera Account ID (0.0.X), get EVM address from Mirror Node
+            let evmAddress;
+            if (userAddress.startsWith('0.0.')) {
+                console.log(`[TokenBalance] Converting Hedera ID ${userAddress} to EVM address`);
+                const mirrorNodeUrl = HEDERA_CONFIG.mirrorNodeUrl;
+                const response = await fetch(`${mirrorNodeUrl}/api/v1/accounts/${userAddress}`);
+                
+                if (!response.ok) {
+                    console.error(`[TokenBalance] Failed to get account info: ${response.status}`);
+                    throw new Error(`Account ${userAddress} not found`);
+                }
+                
+                const data = await response.json();
+                evmAddress = data.evm_address;
+                
+                if (!evmAddress) {
+                    throw new Error(`No EVM address found for ${userAddress}`);
+                }
+                
+                console.log(`[TokenBalance] ${userAddress} -> ${evmAddress}`);
+            } else {
+                evmAddress = this.validateAddress(userAddress);
+            }
+            
+            // TokenEconomyV2 is an ERC20 contract, not HTS token
+            // Query balanceOf via JSON-RPC
+            const contract = this.getEthersContract('TokenEconomy');
+            const balance = await contract.balanceOf(evmAddress);
+            
+            // TokenEconomyV2 uses 8 decimals, convert to HPLAY
+            const balanceInSmallestUnits = Number(balance);
+            const balanceInHPLAY = balanceInSmallestUnits / 100000000; // Divide by 10^8
+            
+            console.log(`[TokenBalance] ${evmAddress}: ${balanceInHPLAY} HPLAY (raw: ${balanceInSmallestUnits})`);
+            
+            // Cache the result
+            this.balanceCache.set(cacheKey, {
+                balance: balanceInHPLAY,
+                timestamp: Date.now()
+            });
+            
+            return balanceInHPLAY;
+        } catch (error) {
+            console.error('Error getting token balance:', error.message);
+            // Cache zero balance on error to prevent spam
+            const cacheKey = `balance_${userAddress}`;
+            this.balanceCache.set(cacheKey, {
+                balance: 0,
+                timestamp: Date.now()
+            });
+            return 0;
+        }
     }
 
     async getRemainingDailyLimitRpc(userAddress) {

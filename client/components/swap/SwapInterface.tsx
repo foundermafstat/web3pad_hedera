@@ -7,9 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, ArrowUpDown, Wallet, Coins, TrendingUp } from 'lucide-react';
-import { hederaService, HederaWalletData } from '@/lib/hedera';
-import { blockchainService } from '@/lib/blockchain';
+import { Loader2, ArrowUpDown, Wallet } from 'lucide-react';
 import { hederaClient } from '@/lib/hedera-client';
 import { hashpackUtils } from '@/lib/hashpack-utils';
 import { authenticatedWalletUtils } from '@/lib/authenticated-wallet-utils';
@@ -42,7 +40,6 @@ export function SwapInterface() {
 	const [hbarBalance, setHbarBalance] = useState<number>(0);
 	const [hplayBalance, setHplayBalance] = useState<number>(0);
 	const [isConnecting, setIsConnecting] = useState(false);
-	const [slippagePct, setSlippagePct] = useState<number>(0.5);
 
 	// Get wallet data from authenticated session as fallback
 	const walletData = authenticatedWalletUtils.getWalletFromSession(session);
@@ -107,9 +104,12 @@ export function SwapInterface() {
 
 	const loadHplayBalance = async (address: string) => {
 		try {
+			console.log('[SwapInterface] Loading HPLAY balance for address:', address);
 			const balance = await hederaClient.getTokenBalance(address);
+			console.log('[SwapInterface] HPLAY balance received:', balance);
 			setHplayBalance(balance);
 		} catch (error) {
+			console.error('[SwapInterface] Error loading HPLAY balance:', error);
 			setHplayBalance(0);
 		}
 	};
@@ -297,15 +297,22 @@ export function SwapInterface() {
 
 			// CRITICAL: Use transactionBodyData for WalletConnect (only body bytes to sign)
 			// Use full transactionData for other wallets
-			const bytesToSign = walletType === 'walletconnect' && transactionData.transactionBodyData
-				? transactionData.transactionBodyData
-				: transactionData.transactionData;
+			const bytesToSign =
+				walletType === 'walletconnect' && transactionData.transactionBodyData
+					? transactionData.transactionBodyData
+					: transactionData.transactionData;
 
 			console.log('📦 Bytes to sign:', {
-				useBodyData: walletType === 'walletconnect' && !!transactionData.transactionBodyData,
+				useBodyData:
+					walletType === 'walletconnect' &&
+					!!transactionData.transactionBodyData,
 				bodyDataLength: transactionData.transactionBodyData?.length,
 				fullDataLength: transactionData.transactionData?.length,
-				selectedLength: Array.isArray(bytesToSign) ? bytesToSign.length : bytesToSign instanceof Uint8Array ? bytesToSign.length : 0
+				selectedLength: Array.isArray(bytesToSign)
+					? bytesToSign.length
+					: bytesToSign instanceof Uint8Array
+					? bytesToSign.length
+					: 0,
 			});
 
 			// Convert transaction data to Uint8Array if needed
@@ -324,10 +331,7 @@ export function SwapInterface() {
 				transactionBytes = new Uint8Array(
 					hex.match(/.{1,2}/g)!.map((byte: string) => parseInt(byte, 16))
 				);
-			} else if (
-				bytesToSign &&
-				typeof bytesToSign === 'object'
-			) {
+			} else if (bytesToSign && typeof bytesToSign === 'object') {
 				// Check if it's an object with bytes property or similar
 				console.log(
 					'Transaction data is an object, checking for bytes property...',
@@ -364,9 +368,10 @@ export function SwapInterface() {
 							isArray: Array.isArray(bytesToSign),
 							value: bytesToSign,
 							keys: transactionData ? Object.keys(transactionData) : [],
-							bytesToSignKeys: bytesToSign && typeof bytesToSign === 'object'
-								? Object.keys(bytesToSign)
-								: [],
+							bytesToSignKeys:
+								bytesToSign && typeof bytesToSign === 'object'
+									? Object.keys(bytesToSign)
+									: [],
 						});
 						throw new Error(
 							`Invalid transaction data format: ${typeof bytesToSign}. Object lacks bytes/data/transactionBytes. Structure: ${JSON.stringify(
@@ -391,8 +396,12 @@ export function SwapInterface() {
 				length: transactionBytes.length,
 				firstBytes: Array.from(transactionBytes.slice(0, 20)),
 				lastBytes: Array.from(transactionBytes.slice(-10)),
-				bytesHex: Array.from(transactionBytes.slice(0, 30)).map(b => b.toString(16).padStart(2, '0')).join(''),
-				isBodyData: walletType === 'walletconnect' && !!transactionData.transactionBodyData
+				bytesHex: Array.from(transactionBytes.slice(0, 30))
+					.map((b) => b.toString(16).padStart(2, '0'))
+					.join(''),
+				isBodyData:
+					walletType === 'walletconnect' &&
+					!!transactionData.transactionBodyData,
 			});
 
 			// Step 1: Use global wallet state first (if WalletConnect)
@@ -426,17 +435,19 @@ export function SwapInterface() {
 						'✅ Transaction signed successfully via global WalletConnect state:',
 						signature
 					);
-					
+
 					// Log detailed signature info
 					console.log('📝 Signature details:', {
 						hasSignature: !!signature.signature,
 						hasSignatureMap: !!signature.signatureMap,
 						hasSignedTransactionBytes: !!signature.signedTransactionBytes,
 						signedTransactionBytesType: typeof signature.signedTransactionBytes,
-						signedTransactionBytesIsArray: Array.isArray(signature.signedTransactionBytes),
+						signedTransactionBytesIsArray: Array.isArray(
+							signature.signedTransactionBytes
+						),
 						accountId: signature.accountId,
 						transactionId: signature.transactionId,
-						fullSignature: signature
+						fullSignature: signature,
 					});
 
 					// Validate signature response
@@ -694,24 +705,9 @@ export function SwapInterface() {
 		}
 	};
 
-	const formatHbarAmount = (amount: number) => {
-		return `${amount.toFixed(2)} HBAR`;
-	};
-
-	const formatHplayAmount = (amount: number) => {
-		return `${amount.toFixed(8)} HPLAY`;
-	};
-
 	const getRemainingDailyLimit = () => {
 		if (!swapRate || !userSwapInfo) return 0;
 		return Math.max(0, swapRate.dailyLimitHbar - userSwapInfo.dailyUsedHbar);
-	};
-
-	const minReceived = () => {
-		const amount = parseFloat(hbarAmount || '0');
-		if (!swapRate || isNaN(amount) || amount <= 0) return 0;
-		const expected = amount * swapRate.hbarToHplayRate;
-		return expected * (1 - slippagePct / 100);
 	};
 
 	const handleUseMax = () => {
@@ -721,16 +717,15 @@ export function SwapInterface() {
 	};
 
 	return (
-		<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+		<div className="max-w-2xl mx-auto">
 			{/* Main Swap Card */}
-			<div className="lg:col-span-2">
-				<Card className="bg-white/10 backdrop-blur-sm border-white/20">
-					<CardHeader>
-						<CardTitle className="text-white text-2xl flex items-center gap-2">
-							<ArrowUpDown className="h-6 w-6" />
-							Token Swap
-						</CardTitle>
-					</CardHeader>
+			<Card className="bg-white/10 backdrop-blur-sm border-white/20">
+				<CardHeader>
+					<CardTitle className="text-white text-2xl flex items-center gap-2">
+						<ArrowUpDown className="h-6 w-6" />
+						Token Swap
+					</CardTitle>
+				</CardHeader>
 					<CardContent className="space-y-6">
 						{/* Wallet Connection */}
 						{status === 'loading' ? (
@@ -769,63 +764,22 @@ export function SwapInterface() {
 							</div>
 						) : (
 							<div className="space-y-4">
-								{/* Connected Wallet Info */}
-								<div className="bg-green-500/20 border border-green-500/30 rounded-lg p-4">
-									<div className="flex items-center gap-2 text-green-400">
-										<Wallet className="h-4 w-4" />
-										<span className="font-medium">Signed in with wallet</span>
-									</div>
-									<p className="text-sm text-gray-300 mt-1">
-										User: {session.user.name || session.user.email}
-									</p>
-									<p className="text-sm text-gray-300">
-										Address:{' '}
-										{wallet.walletAddress ||
-											walletData.wallet?.address ||
-											'Not provided'}
-									</p>
-									<p className="text-sm text-gray-300">
-										Network:{' '}
-										{(wallet.network || walletData.wallet?.network) ===
-										'testnet'
-											? 'Testnet'
-											: 'Mainnet'}
-									</p>
-									{wallet.walletType && (
-										<p className="text-sm text-gray-300">
-											Wallet:{' '}
-											{wallet.walletType === 'walletconnect'
-												? 'WalletConnect'
-												: wallet.walletType === 'hashpack'
-												? 'HashPack'
-												: wallet.walletType}
-										</p>
-									)}
-								</div>
-
-								{/* HBAR Balance */}
-								<div className="bg-blue-500/20 border border-blue-500/30 rounded-lg p-4">
-									<div className="flex items-center justify-between">
-										<div className="flex items-center gap-2 text-blue-400">
-											<Coins className="h-4 w-4" />
-											<span className="font-medium">HBAR Balance</span>
+								{/* Token Balances - Single Row */}
+								<div className="grid grid-cols-2 gap-4">
+									{/* HBAR Balance */}
+									<div className="bg-blue-500/20 border border-blue-500/30 rounded-lg p-3">
+										<div className="text-xs text-blue-400 mb-1">HBAR</div>
+										<div className="text-white font-bold text-lg">
+											{hbarBalance.toFixed(2)}
 										</div>
-										<span className="text-white font-bold">
-											{formatHbarAmount(hbarBalance)}
-										</span>
 									</div>
-								</div>
 
-								{/* HPLAY Balance */}
-								<div className="bg-purple-500/20 border border-purple-500/30 rounded-lg p-4">
-									<div className="flex items-center justify-between">
-										<div className="flex items-center gap-2 text-purple-400">
-											<Coins className="h-4 w-4" />
-											<span className="font-medium">HPLAY Balance</span>
+									{/* HPLAY Balance */}
+									<div className="bg-purple-500/20 border border-purple-500/30 rounded-lg p-3">
+										<div className="text-xs text-purple-400 mb-1">HPLAY</div>
+										<div className="text-white font-bold text-lg">
+											{hplayBalance.toFixed(2)}
 										</div>
-										<span className="text-white font-bold">
-											{formatHplayAmount(hplayBalance)}
-										</span>
 									</div>
 								</div>
 
@@ -855,12 +809,6 @@ export function SwapInterface() {
 											className="bg-white/10 border-white/20 text-white placeholder:text-gray-400"
 											disabled={isSwapping}
 										/>
-										{swapRate && userSwapInfo && (
-											<p className="mt-1 text-xs text-gray-400">
-												Remaining today:{' '}
-												{formatHbarAmount(getRemainingDailyLimit())}
-											</p>
-										)}
 									</div>
 
 									<div className="flex justify-center">
@@ -880,51 +828,14 @@ export function SwapInterface() {
 										/>
 									</div>
 
-									{/* Swap Rate Info */}
+									{/* Swap Rate Info - Simplified */}
 									{swapRate && (
 										<div className="bg-gray-500/20 border border-gray-500/30 rounded-lg p-3">
-											<div className="flex items-center gap-2 text-gray-300 text-sm">
-												<TrendingUp className="h-4 w-4" />
-												<span>
-													Rate: 1 HBAR = {swapRate.hbarToHplayRate.toFixed(8)}{' '}
-													HPLAY
+											<div className="flex items-center justify-between text-sm">
+												<span className="text-gray-300">Rate:</span>
+												<span className="text-white font-medium">
+													1 HBAR = {swapRate.hbarToHplayRate.toFixed(2)} HPLAY
 												</span>
-											</div>
-											<div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-gray-300">
-												<div className="flex items-center justify-between">
-													<span>Slippage tolerance</span>
-													<div className="flex gap-1">
-														{[0.1, 0.5, 1].map((p) => (
-															<Button
-																key={p}
-																size="sm"
-																variant={
-																	slippagePct === p ? 'default' : 'ghost'
-																}
-																onClick={() => setSlippagePct(p)}
-																className={`h-6 px-2 ${
-																	slippagePct === p
-																		? 'bg-white/20 text-white'
-																		: 'text-gray-300'
-																}`}
-															>
-																{p}%
-															</Button>
-														))}
-													</div>
-												</div>
-												<div className="flex items-center justify-between">
-													<span>Min received</span>
-													<span className="text-white">
-														{formatHplayAmount(minReceived())}
-													</span>
-												</div>
-												<div className="flex items-center justify-between">
-													<span>Daily limit</span>
-													<span className="text-white">
-														{formatHbarAmount(swapRate.dailyLimitHbar)}
-													</span>
-												</div>
 											</div>
 										</div>
 									)}
@@ -966,155 +877,7 @@ export function SwapInterface() {
 							</Alert>
 						)}
 					</CardContent>
-				</Card>
-			</div>
-
-			{/* Info Sidebar */}
-			<div className="space-y-6">
-				{/* Swap Rate Info */}
-				{swapRate && (
-					<Card className="bg-white/10 backdrop-blur-sm border-white/20">
-						<CardHeader>
-							<CardTitle className="text-white text-lg">
-								Swap Information
-							</CardTitle>
-						</CardHeader>
-						<CardContent className="space-y-4">
-							<div className="space-y-3">
-								<div className="flex justify-between">
-									<span className="text-gray-300">Exchange rate:</span>
-									<span className="text-white font-medium">
-										1 HBAR = {swapRate.hbarToHplayRate.toFixed(8)} HPLAY
-									</span>
-								</div>
-								<div className="flex justify-between">
-									<span className="text-gray-300">Daily limit:</span>
-									<span className="text-white font-medium">
-										{formatHbarAmount(swapRate.dailyLimitHbar)}
-									</span>
-								</div>
-								<div className="flex justify-between">
-									<span className="text-gray-300">Status:</span>
-									<span
-										className={`font-medium ${
-											swapRate.faucetEnabled ? 'text-green-400' : 'text-red-400'
-										}`}
-									>
-										{swapRate.faucetEnabled ? 'Active' : 'Inactive'}
-									</span>
-								</div>
-							</div>
-						</CardContent>
-					</Card>
-				)}
-
-				{/* User Stats */}
-				{userSwapInfo && (
-					<Card className="bg-white/10 backdrop-blur-sm border-white/20">
-						<CardHeader>
-							<CardTitle className="text-white text-lg">Your Stats</CardTitle>
-						</CardHeader>
-						<CardContent className="space-y-4">
-							<div className="space-y-3">
-								<div className="flex justify-between">
-									<span className="text-gray-300">Used today:</span>
-									<span className="text-white font-medium">
-										{formatHbarAmount(userSwapInfo.dailyUsedHbar)}
-									</span>
-								</div>
-								<div className="flex justify-between">
-									<span className="text-gray-300">Remaining today:</span>
-									<span className="text-white font-medium">
-										{formatHbarAmount(getRemainingDailyLimit())}
-									</span>
-								</div>
-								<div className="flex justify-between">
-									<span className="text-gray-300">Total swaps:</span>
-									<span className="text-white font-medium">
-										{userSwapInfo.totalSwaps}
-									</span>
-								</div>
-							</div>
-						</CardContent>
-					</Card>
-				)}
-
-				{/* Instructions */}
-				<Card className="bg-white/10 backdrop-blur-sm border-white/20">
-					<CardHeader>
-						<CardTitle className="text-white text-lg">How to swap</CardTitle>
-					</CardHeader>
-					<CardContent>
-						<div className="space-y-3 text-sm text-gray-300">
-							<div className="flex items-start gap-2">
-								<span className="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
-									1
-								</span>
-								<span>Install HashPack or another Hedera wallet</span>
-							</div>
-							<div className="flex items-start gap-2">
-								<span className="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
-									2
-								</span>
-								<span>Connect your wallet via sign-in</span>
-							</div>
-							<div className="flex items-start gap-2">
-								<span className="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
-									3
-								</span>
-								<span>Enter the HBAR amount to swap</span>
-							</div>
-							<div className="flex items-start gap-2">
-								<span className="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
-									4
-								</span>
-								<span>Click "Swap Tokens"</span>
-							</div>
-							<div className="flex items-start gap-2">
-								<span className="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
-									5
-								</span>
-								<span>Sign the transaction in your wallet</span>
-							</div>
-							<div className="flex items-start gap-2">
-								<span className="bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
-									6
-								</span>
-								<span>Receive HPLAY tokens to your wallet</span>
-							</div>
-						</div>
-						<div className="mt-4 p-3 bg-green-500/20 border border-green-500/30 rounded-lg">
-							<div className="flex items-center gap-2 text-green-400 text-sm">
-								<span className="font-medium">
-									✓ REAL swap on Hedera network
-								</span>
-							</div>
-							<p className="text-xs text-gray-300 mt-1">
-								Hedera ID: 0.0.7153889 (FaucetManager)
-							</p>
-							<p className="text-xs text-gray-300">
-								Ethereum ID: 0xe334AfEc78B410C953A9bEa0Ff1E55F74bdeC212
-							</p>
-							<p className="text-xs text-gray-300">Network: Hedera Testnet</p>
-							<p className="text-xs text-gray-300">
-								✅ Supports HashPack, Blade, Yamgo, WalletConnect
-							</p>
-							<p className="text-xs text-gray-300">
-								✅ HBAR is debited from YOUR wallet
-							</p>
-							<p className="text-xs text-gray-300">
-								✅ HPLAY tokens are credited to YOUR wallet
-							</p>
-							<p className="text-xs text-gray-300">
-								✅ Transaction is executed from YOUR account
-							</p>
-							<p className="text-xs text-gray-300">
-								✅ Wallet signature required
-							</p>
-						</div>
-					</CardContent>
-				</Card>
-			</div>
+			</Card>
 		</div>
 	);
 }

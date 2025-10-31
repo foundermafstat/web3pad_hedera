@@ -32,6 +32,18 @@ const CONTRACT_ADDRESSES = {
 		process.env.HEDERA_GAME_LAUNCHPAD_HEDERA_ID || '0.0.7153891', // 0x54d13a05c632738674558f18de4394b7ee9a0399
 };
 
+// EVM addresses mapping (0x format) for JSON-RPC calls
+const CONTRACT_EVM_ADDRESSES = {
+	GameRegistry: '0xda0cbeae027b044648386e4c27e20c18257c885a',
+	TokenEconomy: '0x23F6BB3A2c8BaBEe952E0443b6B7350aA85d6AB9', // V2
+	LotteryPool: '0x9bb862643a73725e636dd7d7e30306844aa099f3',
+	PlayerSBT: '0xfe9CF4dde9fBc14d61D26703354AA10414B35Ea6',
+	NFTManager: '0x01Af1C62098d0217dEE7bC8A72dd93fa6D02b860',
+	FaucetManager: '0xEE9E9Daf635aAdcBe7725FAae73f6D38F66cfB3A', // V2
+	ResultVerifier: '0xb1583369fe74fbf2d9b87b870fe67d6d0dc13b84',
+	HederaGameLaunchpad: '0x54d13a05c632738674558f18de4394b7ee9a0399',
+};
+
 // Contract ABIs (simplified for read operations)
 const CONTRACT_ABIS = {
 	GameRegistry: [
@@ -146,20 +158,17 @@ export function getContractConfig(contractName) {
 }
 
 /**
- * Get EVM address (0x...) for a configured contract from Hedera 0.0.x id
+ * Get EVM address (0x...) for a configured contract
+ * Uses pre-configured EVM addresses to avoid conversion issues
  */
 export function getContractEvmAddress(contractName) {
-	const { contractId } = getContractConfig(contractName);
-	try {
-		const evmHex = contractId.toSolidityAddress();
-		return `0x${evmHex}`;
-	} catch (e) {
-		throw new Error(
-			`Failed to convert contractId to EVM address for ${contractName}: ${
-				e?.message || e
-			}`
-		);
+	const evmAddress = CONTRACT_EVM_ADDRESSES[contractName];
+	
+	if (!evmAddress) {
+		throw new Error(`EVM address not found for contract ${contractName}`);
 	}
+	
+	return evmAddress;
 }
 
-export { HEDERA_CONFIG, CONTRACT_ADDRESSES, CONTRACT_ABIS, HEDERA_USE_MOCKS };
+export { HEDERA_CONFIG, CONTRACT_ADDRESSES, CONTRACT_EVM_ADDRESSES, CONTRACT_ABIS, HEDERA_USE_MOCKS };

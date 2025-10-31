@@ -66,35 +66,42 @@ pnpm dev
 The integration provides REST API endpoints under `/api/contracts/`:
 
 ### System Information
+
 - `GET /api/contracts/system/stats` - Get system statistics
 - `GET /api/contracts/system/operational` - Check system status
 
 ### Player Data
+
 - `GET /api/contracts/player/:address/info` - Get comprehensive player info
 - `GET /api/contracts/player/:address/stats` - Get player statistics
 - `GET /api/contracts/player/:address/sbt` - Check SBT status
 - `GET /api/contracts/player/:address/nft-count` - Get NFT count
 
 ### Token Economy
+
 - `GET /api/contracts/token/balance/:address` - Get token balance
 - `GET /api/contracts/token/supply` - Get total supply
 - `GET /api/contracts/token/staked/:address` - Get staked balance
 
 ### Game Information
+
 - `GET /api/contracts/games/:gameId/info` - Get game module info
 - `GET /api/contracts/games/:gameId/difficulty` - Get difficulty multiplier
 - `GET /api/contracts/games/total` - Get total games count
 
 ### Lottery System
+
 - `GET /api/contracts/lottery/pool-balance` - Get pool balance
 - `GET /api/contracts/lottery/participants` - Get participants count
 - `GET /api/contracts/lottery/next-draw` - Get time until next draw
 
 ### Faucet System
+
 - `GET /api/contracts/faucet/swap-rate` - Get swap rate info
 - `GET /api/contracts/faucet/user/:address` - Get user swap info
 
 ### Reward Calculation
+
 - `POST /api/contracts/rewards/calculate` - Calculate reward amount
 
 ## Usage Examples
@@ -107,15 +114,15 @@ const response = await fetch('/api/contracts/player/0x123.../info');
 const data = await response.json();
 
 if (data.success) {
-    console.log('Player has SBT:', data.data.hasSBT);
-    console.log('Games played:', data.data.stats.totalGamesPlayed);
+	console.log('Player has SBT:', data.data.hasSBT);
+	console.log('Games played:', data.data.stats.totalGamesPlayed);
 }
 
 // Calculate reward
 const rewardResponse = await fetch('/api/contracts/rewards/calculate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ score: 1500, gameId: 'shooter-game' })
+	method: 'POST',
+	headers: { 'Content-Type': 'application/json' },
+	body: JSON.stringify({ score: 1500, gameId: 'shooter-game' }),
 });
 const rewardData = await rewardResponse.json();
 ```
@@ -139,15 +146,15 @@ curl -X POST "http://localhost:3001/api/contracts/rewards/calculate" \
 
 The following contracts are deployed on Hedera Testnet:
 
-| Contract | Address |
-|----------|---------|
-| GameRegistry | `0xdA0cBEaE027b044648386e4c27e20C18257C885A` |
-| TokenEconomy | `0x0c8f77D99Ff0A20C4b5308abe24163C70C781963` |
-| LotteryPool | `0x9BB862643a73725E636dD7d7E30306844aA099f3` |
-| PlayerSBT | `0xfe9CF4dde9fBc14d61D26703354AA10414B35Ea6` |
-| NFTManager | `0x01Af1C62098d0217dEE7bC8A72dd93fa6D02b860` |
-| FaucetManager | `0xe334AfEc78B410C953A9bEa0Ff1E55F74bdeC212` |
-| ResultVerifier | `0xb1583369fe74FBf2D9b87B870FE67D6D0DC13b84` |
+| Contract            | Address                                      |
+| ------------------- | -------------------------------------------- |
+| GameRegistry        | `0xdA0cBEaE027b044648386e4c27e20C18257C885A` |
+| TokenEconomy        | `0x23f6bb3a2c8babee952e0443b6b7350aa85d6ab9` |
+| LotteryPool         | `0x9BB862643a73725E636dD7d7E30306844aA099f3` |
+| PlayerSBT           | `0xfe9CF4dde9fBc14d61D26703354AA10414B35Ea6` |
+| NFTManager          | `0x01Af1C62098d0217dEE7bC8A72dd93fa6D02b860` |
+| FaucetManager       | `0xe334AfEc78B410C953A9bEa0Ff1E55F74bdeC212` |
+| ResultVerifier      | `0xb1583369fe74FBf2D9b87B870FE67D6D0DC13b84` |
 | HederaGameLaunchpad | `0x54d13a05C632738674558f18De4394b7Ee9A0399` |
 
 ## Error Handling
@@ -156,10 +163,10 @@ All endpoints return standardized error responses:
 
 ```json
 {
-    "success": false,
-    "error": "Error message",
-    "type": "ERROR_TYPE",
-    "timestamp": "2024-01-01T00:00:00.000Z"
+	"success": false,
+	"error": "Error message",
+	"type": "ERROR_TYPE",
+	"timestamp": "2024-01-01T00:00:00.000Z"
 }
 ```
 
