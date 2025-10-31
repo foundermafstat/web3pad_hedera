@@ -198,7 +198,8 @@ class HederaClient {
   }
 
   /**
-   * Mint Player SBT for a user
+   * Mint Player SBT for a user (deprecated - uses system account)
+   * @deprecated Use createSBTMintTransaction and executeSBTMint instead
    */
   async mintPlayerSBT(userAddress: string, tokenUri?: string): Promise<{ transactionId: string }> {
     try {
@@ -214,6 +215,101 @@ class HederaClient {
       }
 
       return { transactionId: data.data.transactionId };
+    } catch (error) {
+      throw error as Error;
+    }
+  }
+
+  /**
+   * Create SBT mint transaction for user to sign with their wallet
+   */
+  async createSBTMintTransaction(userAddress: string, tokenUri?: string): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/contracts/player-sbt/create-mint-transaction`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userAddress, tokenUri }),
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to create SBT mint transaction');
+      }
+
+      return data;
+    } catch (error) {
+      throw error as Error;
+    }
+  }
+
+  /**
+   * Execute signed SBT mint transaction
+   */
+  async executeSBTMint(
+    signedTransaction: any,
+    userAddress: string,
+    originalTransactionBytes?: number[]
+  ): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/contracts/player-sbt/execute-mint`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          signedTransaction,
+          userAddress,
+          originalTransactionBytes,
+        }),
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to execute SBT mint transaction');
+      }
+
+      return data;
+    } catch (error) {
+      throw error as Error;
+    }
+  }
+
+  /**
+   * Check if player has SBT token
+   */
+  async hasPlayerSBT(address: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/contracts/player-sbt/rpc/has-sbt/${address}`);
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to check SBT status');
+      }
+
+      return data.data.hasSBT;
+    } catch (error) {
+      throw error as Error;
+    }
+  }
+
+  /**
+   * Get player stats from SBT token
+   */
+  async getPlayerSBTStats(address: string): Promise<{
+    totalGamesPlayed: number;
+    totalWins: number;
+    totalPoints: number;
+    totalLosses: number;
+    averageScore: number;
+    lastGameTimestamp: number;
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/api/contracts/player-sbt/rpc/player-stats/${address}`);
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to fetch player stats');
+      }
+
+      return data.data;
     } catch (error) {
       throw error as Error;
     }

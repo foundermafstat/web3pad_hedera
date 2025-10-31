@@ -2,8 +2,13 @@
 
 **Превратите любой экран в мгновенную мультиплеерную игровую арену с интеграцией блокчейна Hedera. Ваш смартфон — это ваш контроллер.**
 
-Никаких загрузок. Никаких установок. Никакой возни.
-Просто отсканируйте QR-код, играйте и соревнуйтесь с друзьями за считанные секунды!
+Web3Pad Hedera Gaming Platform is a hybrid Web2/Web3 multiplayer gaming system designed for mass adoption — a native, simple, and social way for everyday people to step into Web3 through games with friends.
+
+It bridges the gap between traditional entertainment and blockchain technology by turning any screen into a game hub and any smartphone into a controller. Players can instantly join arcade-style and party games via QR code, play together in real time, and earn blockchain-verified rewards without any prior Web3 knowledge.
+
+No wallets, no setup, no installations — just fun that naturally leads to Web3.
+
+Behind the scenes, Web3Pad integrates Hedera smart contracts for token rewards (HPLAY), NFT achievements, and fair gameplay validation. After each match, players can claim digital trophies, trade tokens, or join lotteries — all powered by the Hedera network.
 
 ---
 
@@ -18,9 +23,12 @@
 - [Стратегия перехода Web2 → Web3](#-стратегия-перехода-web2--web3)
 - [Быстрый старт](#-быстрый-старт)
 - [Архитектура системы](#️-архитектура-системы)
+- [Блокчейн интеграция](#️-блокчейн-интеграция)
 - [Встроенные игры](#-встроенные-игры)
 - [Смарт-контракты Hedera](#-смарт-контракты-hedera)
-- [Токен-экономика](#-токен-экономика)
+- [Error Handling](#-error-handling)
+- [Smart-contracts Architecture](#-smart-contracts-architecture)
+- [Token Economy Overview](#-token-economy)
 - [Кошельки и авторизация](#-кошельки-и-авторизация)
 - [API и интеграция контрактов](#-api-и-интеграция-контрактов)
 - [Функции безопасности контрактов](#️-безопасность)
@@ -118,7 +126,7 @@ cd web3pad_hedera
 2. **Установите зависимости:**
 
 ```bash
-npm install
+pnpm install
 ```
 
 3. **Настройте переменные окружения:**
@@ -150,11 +158,21 @@ NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_project_id_here
 ```bash
 # Запустить сервер (порт 3001)
 cd server
+pnpm install
 node server.js
 
 # В новом терминале - запустить клиент (порт 3000)
 cd client
-npm run dev
+pnpm install
+pnpm run dev
+```
+
+5. **Запустите проект локально:**
+
+```bash
+pnpm start
+# or for development
+pnpm dev
 ```
 
 ---
@@ -163,7 +181,20 @@ npm run dev
 
 ### Обзор компонентов
 
-Платформа состоит из трех основных слоев:
+The platform is built on a three-tier architecture that clearly separates the presentation layer (Next.js client), application logic (Express.js server with Socket.IO), and data persistence (PostgreSQL and Hedera blockchain). This architecture powers a hybrid Web2/Web3 gaming system where traditional multiplayer gameplay runs on centralized servers, while player rewards, the token economy, and achievements are securely managed on the Hedera Hashgraph blockchain.
+
+### Core Technologies
+
+The platform is built on the following core technologies:
+
+| **Layer**          | **Technology**             | **Key Dependencies**                                                         |
+| ------------------ | -------------------------- | ---------------------------------------------------------------------------- |
+| **Client**         | Next.js 16 (App Router)    | `react`, `next-auth`, `@hashgraph/hedera-wallet-connect`, `socket.io-client` |
+| **Server**         | Express.js + Socket.IO     | `express@4.18.2`, `socket.io@4.7.5`, `@hashgraph/sdk@2.50.0`                 |
+| **Database**       | PostgreSQL + Prisma        | `@prisma/client@6.1.0`, `prisma@6.1.0`                                       |
+| **Blockchain**     | Hedera Hashgraph (Testnet) | `@hashgraph/sdk`, `ethers@6.13.2`                                            |
+| **Authentication** | NextAuth.js                | `next-auth, jsonwebtoken@9.0.2, bcryptjs@2.4.3`                              |
+
 
 ```
 ├── client/                    # Next.js фронтенд приложение
@@ -174,18 +205,87 @@ npm run dev
 │   └── hooks/                 # Пользовательские React hooks
 │
 ├── server/                    # Node.js + Express бэкенд
-│   ├── lib/                   # Сервисы (ContractService, TransactionService)
-│   ├── routes/                # API маршруты
+│   └── docs/
+│    	└── contract-api.md          # API documentation
 │   ├── games/                 # Игровая логика
+│   ├── lib/
+│   	├── hedera-config.js          # Hedera client configuration
+│   	├── contract-service.js       # Contract interaction service
+│   	└── contract-error-handler.js # Enhanced error handling
+│		├── middleware/
+│   	└── contract-middleware.js   # API middleware
 │   └── prisma/                # База данных и схемы
+│   ├── routes/                # API routes
+│   	└── contracts.js             # API routes
+│		├── scripts/
 │
 └── contracts/                 # Hedera смарт-контракты
-    ├── contracts/             # Solidity контракты
+    ├── core/                  # Solidity контракты
     ├── scripts/               # Скрипты развертывания
     └── test/                  # Тесты контрактов
 ```
 
-### Блокчейн интеграция
+### Key Architectural Patterns:
+
+| **Component**                      | **Description**                                                                                                                                                                                                                                                                                                                                          |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Client-Side Wallet Integration** | The `HederaService` singleton (`client/lib/hedera.ts`, lines 23–584) manages WalletConnect sessions using the `@hashgraph/hedera-wallet-connect` `DAppConnector` class, enabling direct wallet-to-blockchain communication for transaction signing.                                                                                                      |
+| **Dual Service Architecture**      | The backend implements two dedicated blockchain interaction services: <br>• **ContractService** (`server/lib/contract-service.js`, lines 9–667): Handles read-only queries via `ContractCallQuery` and `ethers.Contract`. <br>• **TransactionService** (`server/lib/transaction-service.js`): Handles write operations via `ContractExecuteTransaction`. |
+| **Hybrid API Routing**             | Next.js API routes serve as authenticated gateways to the Express backend. Some routes proxy to Express (e.g., `client/app/api/swap`), while others are processed directly on the client side.                                                                                                                                                           |
+| **Socket.IO Real-Time Layer**      | Game state synchronization is managed via bidirectional Socket.IO events handled by the `GameRoomManager`.                                                                                                                                                                                                                                           |
+
+![Архитектура проекта](./client/public/schemas/architecture.png)
+
+### Request Flow Architecture
+The following diagram illustrates the complete request flow for critical operations, showing the path from user interaction to blockchain state change.
+
+### Token Swap Request Flow: 
+
+![Token swap](./client/public/schemas/token-swap.png)
+
+This flow demonstrates the critical security pattern where:
+1. Server creates unsigned transactions with user as payer (server/lib/transaction-service.js)
+2. Client obtains signature from user's wallet (client/components/swap/SwapInterface.tsx)
+3. Server executes the pre-signed transaction (server/routes/swap.js)
+
+### Authentication Architecture
+The platform supports several authentication methods through NextAuth.js configuration, each with distinct provider implementations.
+
+Authentication Flow Implementation:
+1. Credentials Authentication (client/lib/auth.config.ts): Uses bcryptjs to hash passwords and validates against User.password field in PostgreSQL.
+
+2. OAuth Authentication (client/lib/auth.config.ts): The signIn callback intercepts OAuth providers (Google, GitHub) and synchronizes user data to the backend via /api/auth/oauth endpoint (server/routes/auth.js).
+
+3. Wallet Authentication - Two separate flows:
+
+- Blockchain (Leather) (client/lib/auth.config.ts): Validates EVM wallet addresses using isValidBlockchainAddress() function
+- Hedera (client/lib/auth.config.ts): Validates Hedera address format \d+\.\d+\.\d+ using isValidHederaAddress() function
+4. Session Management (client/lib/auth.config.ts): JWT tokens store userId, username, wallets[] array, and displayName which are populated into the NextAuth session object.
+
+### Smart Contract Integration 
+The platform interfaces with eight deployed Hedera smart contracts through a dual-approach pattern using both Hedera SDK and Ethers.js JSON-RPC.
+
+#### Contract Service Architecture:
+--
+
+### Adding New Contract Functions
+
+1. Add function to `contract-service.js`
+2. Add corresponding API endpoint in `routes/contracts.js`
+3. Update API documentation
+4. Add test case to `test-contracts.js`
+
+### Testing
+
+```bash
+# Run integration tests
+node scripts/test-contracts.js
+
+# Test specific endpoint
+curl -X GET "http://localhost:3001/api/contracts/system/stats"
+```
+
+## Блокчейн интеграция
 
 Платформа интегрируется с Hedera Hashgraph через несколько ключевых компонентов:
 
@@ -223,21 +323,109 @@ npm run dev
 
 ## Смарт-контракты Hedera
 
-Восемь смарт-контрактов развернуты на Hedera Testnet:
+This integration provides server-side access to Hedera smart contracts deployed on the testnet.
+Всего развернуто 9 смарт-контрактов:
 | Контракт | Адрес | Назначение |
 | ------------------- | -------------------------------------------- | -------------------- |
-| GameRegistry | `0xdA0cBEaE027b044648386e4c27e20C18257C885A` | Регистрация игр |
+| GameRegistry | `0xda0cbeae027b044648386e4c27e20c18257c885a` | Регистрация игр |
 | TokenEconomy | `0x23f6bb3a2c8babee952e0443b6b7350aa85d6ab9` | HPLAY токен |
-| LotteryPool | `0x9BB862643a73725E636dD7d7E30306844aA099f3` | Лотерея |
+| LotteryPool | `0x9bb862643a73725e636dd7d7e30306844aa099f3` | Лотерея |
 | PlayerSBT | `0xfe9CF4dde9fBc14d61D26703354AA10414B35Ea6` | SoulBound токены |
 | NFTManager | `0x01Af1C62098d0217dEE7bC8A72dd93fa6D02b860` | NFT достижения |
-| FaucetManager | `0xe334AfEc78B410C953A9bEa0Ff1E55F74bdeC212` | Faucet система |
-| ResultVerifier | `0xb1583369fe74FBf2D9b87B870FE67D6D0DC13b84` | Проверка результатов |
-| HederaGameLaunchpad | `0x54d13a05C632738674558f18De4394b7Ee9A0399` | Главный контракт |
+| FaucetManager | `0xee9e9daf635aadcbe7725faae73f6d38f66cfb3a` | Faucet система |
+| ResultVerifier | `0xb1583369fe74fbf2d9b87b870fe67d6d0dc13b84` | Проверка результатов |
+| HederaGameLaunchpad | `0x54d13a05c632738674558f18de4394b7ee9a0399` | Главный контракт |
 
 ---
 
-## Токен-экономика
+## Error Handling
+
+All endpoints return standardized error responses:
+
+```json
+{
+    "success": false,
+    "error": "Error message",
+    "type": "ERROR_TYPE",
+    "timestamp": "2024-01-01T00:00:00.000Z"
+}
+```
+
+### Error Types
+
+- `VALIDATION_ERROR`: Invalid input parameters
+- `CONTRACT_CALL_FAILED`: Contract function call failed
+- `INVALID_CONTRACT_ADDRESS`: Invalid contract address
+- `INSUFFICIENT_BALANCE`: Insufficient balance for operation
+- `UNAUTHORIZED`: Unauthorized access
+- `NOT_FOUND`: Resource not found
+- `BLOCKCHAIN_ERROR`: Blockchain service error
+- `RATE_LIMIT_EXCEEDED`: Too many requests
+
+### Rate Limiting
+
+- **Limit**: 50 requests per minute per IP address
+- **Headers**: Rate limit information included in responses
+- **Retry-After**: Header provided when limit exceeded
+
+---
+
+## Smart-contracts Architecture
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Client App    │───▶│   Express API    │───▶│  Contract       │
+│                 │    │   /api/contracts │    │  Service        │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+                                │                         │
+                                ▼                         ▼
+                       ┌──────────────────┐    ┌─────────────────┐
+                       │  Error Handler   │    │  Hedera SDK     │
+                       │  & Validation    │    │  Client         │
+                       └──────────────────┘    └─────────────────┘
+                                                         │
+                                                         ▼
+                                                ┌─────────────────┐
+                                                │ Hedera Testnet  │
+                                                │ Smart Contracts │
+                                                └─────────────────┘
+```
+---
+
+## Troubleshooting
+
+### Common Issues
+
+1. **"Contract call failed"**: Check if Hedera account has sufficient HBAR
+2. **"Invalid contract address"**: Verify contract addresses in configuration
+3. **"Rate limit exceeded"**: Wait before making more requests
+4. **"Validation error"**: Check input parameters format
+
+### Debug Mode
+
+Enable debug logging by setting environment variable:
+
+```env
+DEBUG=contracts:*
+```
+
+### Logs
+
+All contract interactions are logged with timestamps and error details. Check server console for detailed information.
+
+## Security Considerations
+
+- ✅ Input validation on all parameters
+- ✅ Rate limiting to prevent abuse
+- ✅ Error handling without exposing sensitive data
+- ✅ Read-only operations (no write access)
+- ✅ Hedera account isolation
+
+---
+
+## Token Economy Overview
+
+The HBAR-to-HPLAY token swap system is the highest-importance feature (importance 9.91). Users exchange native HBAR for the platform's HPLAY token through the FaucetManager smart contract, with swap rates and daily limits enforced on-chain.
 
 - **Токен:** Hedera Play Token (HPLAY)
 - **Decimals:** 8
@@ -258,6 +446,7 @@ npm run dev
 - Epic — 200 HPLAY
 - Legendary — 1000 HPLAY
 
+![Token Economy](./client/public/schemas/token.png)
 ---
 
 ## Кошельки и авторизация
@@ -299,30 +488,77 @@ npm run dev
 
 ## API интеграция контрактов
 
-### Эндпоинты системы
+The integration provides REST API endpoints under `/api/contracts/`:
 
-- `GET /api/contracts/system/stats` - Получить статистику системы
-- `GET /api/contracts/system/operational` - Проверить статус системы
+### System Information
+- `GET /api/contracts/system/stats` - Get system statistics
+- `GET /api/contracts/system/operational` - Check system status
 
-### Эндпоинты игроков
+### Player Data
+- `GET /api/contracts/player/:address/info` - Get comprehensive player info
+- `GET /api/contracts/player/:address/stats` - Get player statistics
+- `GET /api/contracts/player/:address/sbt` - Check SBT status
+- `GET /api/contracts/player/:address/nft-count` - Get NFT count
 
-- `GET /api/contracts/player/:address/info` - Полная информация об игроке
-- `GET /api/contracts/player/:address/stats` - Статистика игрока
-- `GET /api/contracts/player/:address/sbt` - Статус SBT
-- `GET /api/contracts/player/:address/nft-count` - Количество NFT
+### Token Economy
+- `GET /api/contracts/token/balance/:address` - Get token balance
+- `GET /api/contracts/token/supply` - Get total supply
+- `GET /api/contracts/token/staked/:address` - Get staked balance
 
-### Эндпоинты токенов
+### Game Information
+- `GET /api/contracts/games/:gameId/info` - Get game module info
+- `GET /api/contracts/games/:gameId/difficulty` - Get difficulty multiplier
+- `GET /api/contracts/games/total` - Get total games count
 
-- `GET /api/contracts/token/balance/:address` - Баланс токенов
-- `GET /api/contracts/token/supply` - Общий объем
-- `GET /api/contracts/token/staked/:address` - Застейканный баланс
+### Lottery System
+- `GET /api/contracts/lottery/pool-balance` - Get pool balance
+- `GET /api/contracts/lottery/participants` - Get participants count
+- `GET /api/contracts/lottery/next-draw` - Get time until next draw
 
-### Эндпоинты обмена
+### Faucet System
+- `GET /api/contracts/faucet/swap-rate` - Get swap rate info
+- `GET /api/contracts/faucet/user/:address` - Get user swap info
 
-- `POST /api/swap/create-transaction` - Создать неподписанную транзакцию обмена
-- `POST /api/swap/submit-transaction` - Отправить подписанную транзакцию
-- `GET /api/swap/rate` - Получить курс обмена
-- `GET /api/swap/balance/:address` - Баланс HBAR
+### Reward Calculation
+- `POST /api/contracts/rewards/calculate` - Calculate reward amount
+
+## Usage Examples
+
+### JavaScript/TypeScript
+
+```javascript
+// Get player information
+const response = await fetch('/api/contracts/player/0x123.../info');
+const data = await response.json();
+
+if (data.success) {
+    console.log('Player has SBT:', data.data.hasSBT);
+    console.log('Games played:', data.data.stats.totalGamesPlayed);
+}
+
+// Calculate reward
+const rewardResponse = await fetch('/api/contracts/rewards/calculate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ score: 1500, gameId: 'shooter-game' })
+});
+const rewardData = await rewardResponse.json();
+```
+
+### cURL
+
+```bash
+# Get system stats
+curl -X GET "http://localhost:3001/api/contracts/system/stats"
+
+# Get player info
+curl -X GET "http://localhost:3001/api/contracts/player/0x123.../info"
+
+# Calculate reward
+curl -X POST "http://localhost:3001/api/contracts/rewards/calculate" \
+  -H "Content-Type: application/json" \
+  -d '{"score": 1500, "gameId": "shooter-game"}'
+```
 
 ---
 
@@ -390,8 +626,8 @@ npm run dev
 
 ```bash
 cd contracts
-npm test                    # Запустить все тесты
-npm run test:coverage       # Запустить с покрытием
+pnpm test                    # Запустить все тесты
+pnpm run test:coverage       # Запустить с покрытием
 ```
 
 Набор тестов включает:
@@ -408,7 +644,7 @@ npm run test:coverage       # Запустить с покрытием
 node server/scripts/test-contracts.js
 
 # Быстрые тесты
-npm run test:fast
+pnpm run test:fast
 ```
 
 ---

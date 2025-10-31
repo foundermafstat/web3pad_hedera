@@ -1206,6 +1206,429 @@ export class TransactionService {
 	}
 
 	/**
+	 * Create SBT mint transaction for user to sign
+	 * @param {string} userAddress User's Hedera address
+	 * @param {string} tokenUri Token URI for the SBT
+	 * @returns {Promise<Object>} Transaction data for user to sign
+	 */
+	async createSBTMintTransaction(userAddress, tokenUri) {
+		try {
+			if (!this.client) {
+				throw new Error('Hedera client not initialized');
+			}
+
+			const config = getContractConfig('PlayerSBT');
+			const { TransactionId } = await import('@hashgraph/sdk');
+			const userAccountId = AccountId.fromString(userAddress);
+
+			// Convert user address to solidity format
+			let solidityAddress = userAddress;
+			try {
+				if (userAddress && userAddress.match(/^\d+\.\d+\.\d+$/)) {
+					const acc = AccountId.fromString(userAddress);
+					solidityAddress = `0x${acc.toSolidityAddress()}`;
+				}
+			} catch (error) {
+				console.warn('Failed to convert address to solidity format:', error);
+			}
+
+			// Create contract function parameters
+			const params = new ContractFunctionParameters()
+				.addAddress(solidityAddress)
+				.addString(tokenUri || 'ipfs://player-sbt-default');
+
+			// Create contract execute transaction
+			const transaction = new ContractExecuteTransaction()
+				.setContractId(config.contractId)
+				.setFunction('mintSBT', params)
+				.setGas(2000000)
+				.setMaxTransactionFee(Hbar.fromTinybars(1000000000)); // 10 HBAR max fee
+
+			// Set transaction ID with user as payer
+			const transactionId = TransactionId.generate(userAccountId);
+			transaction.setTransactionId(transactionId);
+
+			// Set single node to avoid multiple node transactions
+			const singleNode = AccountId.fromString('0.0.3'); // Testnet node
+			transaction.setNodeAccountIds([singleNode]);
+
+			// Freeze transaction
+			const tempClient = initializeHederaClient();
+			const frozenTransaction = await transaction.freezeWith(tempClient);
+
+			// Get transaction bytes
+			const transactionBytes = frozenTransaction.toBytes();
+			const transactionBytesArray = Array.from(transactionBytes);
+
+			// Extract body bytes for WalletConnect signing
+			const txList = proto.proto.TransactionList.decode(
+				Buffer.from(transactionBytes)
+			);
+			const txProto = txList.transactionList[0];
+			let bodyBytes;
+
+			if (txProto.signedTransactionBytes) {
+				const signedTx = proto.proto.SignedTransaction.decode(
+					txProto.signedTransactionBytes
+				);
+				bodyBytes = signedTx.bodyBytes;
+			} else if (txProto.signedTransaction) {
+				bodyBytes = txProto.signedTransaction.bodyBytes;
+			} else {
+				throw new Error('Cannot extract body bytes from transaction');
+			}
+
+			if (!bodyBytes) {
+				throw new Error('Body bytes not found in frozen transaction');
+			}
+
+			const bodyBytesArray = Array.from(bodyBytes);
+			const nodeAccountIds = frozenTransaction.nodeAccountIds.map((id) =>
+				id.toString()
+			);
+			const contractId = config.contractId.toString();
+
+			console.log('Created SBT mint transaction for signing:', {
+				transactionId: transactionId.toString(),
+				userAddress,
+				contractId,
+				tokenUri,
+			});
+
+			return {
+				success: true,
+				transactionData: transactionBytesArray,
+				transactionBodyData: bodyBytesArray,
+				transactionId: transactionId.toString(),
+				contractId: contractId,
+				functionName: 'mintSBT',
+				gasLimit: 2000000,
+				maxFee: 1000000000,
+				payerAccountId: userAddress,
+				nodeAccountIds: nodeAccountIds,
+				transactionDetails: {
+					contractAddress: contractId,
+					functionName: 'mintSBT',
+					tokenUri: tokenUri || 'ipfs://player-sbt-default',
+					gasLimit: 2000000,
+					maxFee: 1000000000,
+					maxFeeDisplay: (1000000000 / 100000000).toFixed(8),
+					userAccount: userAddress,
+					transactionId: transactionId.toString(),
+					nodeAccountIds: nodeAccountIds,
+					transactionType: 'ContractExecute',
+					isPayable: false,
+				},
+			};
+		} catch (error) {
+			console.error('Error creating SBT mint transaction:', error);
+			throw error;
+		}
+	}
+
+	/**
+	 * Execute signed SBT mint transaction
+	 * @param {Object} signedTransaction Signed transaction data from wallet
+	 * @param {string} userAddress User's Hedera address
+	 * @param {Array} originalTransactionBytes Original transaction bytes
+	 * @returns {Promise<Object>} Transaction result
+	 */
+	async executeSignedSBTMintTransaction(
+		signedTransaction,
+		userAddress,
+		originalTransactionBytes = null
+	) {
+		try {
+			if (!this.client) {
+				throw new Error('Hedera client not initialized');
+			}
+
+			console.log('📝 Executing signed SBT mint transaction:', {
+				userAddress,
+				signature: signedTransaction.signature?.substring(0, 50) + '...',
+				walletType: signedTransaction.walletType || 'unknown',
+				hasOriginalBytes: !!originalTransactionBytes,
+				hasSignedTransactionBytes: !!signedTransaction.signedTransactionBytes,
+			});
+
+			// Try to use fully signed transaction from WalletConnect if available
+			if (signedTransaction.signedTransactionBytes) {
+				try {
+					console.log('✅ Using fully signed transaction from WalletConnect');
+					let signedBytes;
+
+					if (typeof signedTransaction.signedTransactionBytes === 'string') {
+						signedBytes = Buffer.from(
+							signedTransaction.signedTransactionBytes,
+							'base64'
+						);
+					} else if (Array.isArray(signedTransaction.signedTransactionBytes)) {
+						signedBytes = new Uint8Array(
+							signedTransaction.signedTransactionBytes
+						);
+					} else {
+						signedBytes = signedTransaction.signedTransactionBytes;
+					}
+
+					const signedTransactionObj = Transaction.fromBytes(signedBytes);
+					console.log('✅ Transaction restored successfully');
+
+					const executorClient = initializeHederaClient();
+					console.log('🚀 Executing fully signed SBT mint transaction...');
+					const response = await signedTransactionObj.execute(executorClient);
+
+					if (response.errorMessage) {
+						throw new Error(`Transaction failed: ${response.errorMessage}`);
+					}
+
+					const receipt = await response.getReceipt(executorClient);
+
+					if (receipt.status.toString() !== 'SUCCESS') {
+						throw new Error(
+							`Transaction failed with status: ${receipt.status}`
+						);
+					}
+
+					console.log('✅ SBT mint transaction executed successfully:', {
+						transactionId: response.transactionId.toString(),
+						gasUsed: receipt.gasUsed?.toNumber() || 0,
+						walletType: signedTransaction.walletType,
+						userAccountId: signedTransaction.accountId || userAddress,
+					});
+
+					return {
+						success: true,
+						transactionId: response.transactionId.toString(),
+						timestamp: Date.now(),
+						userAddress: userAddress,
+						receipt: {
+							status: receipt.status.toString(),
+							gasUsed: receipt.gasUsed?.toNumber() || 0,
+							contractId: receipt.contractId?.toString(),
+						},
+						walletType: signedTransaction.walletType,
+						isRealTransaction: true,
+						userAccountId: signedTransaction.accountId || userAddress,
+					};
+				} catch (signedTxError) {
+					console.error('❌ Failed to use signed transaction bytes:', {
+						message: signedTxError.message,
+						stack: signedTxError.stack,
+					});
+					console.warn('⚠️ Falling back to manual transaction creation');
+					// Fall through to manual transaction creation
+				}
+			}
+
+			// Manual transaction reconstruction from signature
+			console.log(
+				'🚀 Executing transaction with wallet signature (manual reconstruction)'
+			);
+
+			if (
+				!originalTransactionBytes ||
+				!Array.isArray(originalTransactionBytes)
+			) {
+				throw new Error(
+					'Original transaction bytes are required to execute signed transaction.'
+				);
+			}
+
+			if (!signedTransaction.signature && !signedTransaction.signatureMap) {
+				throw new Error(
+					'User signature is required. Transaction was not signed by wallet.'
+				);
+			}
+
+			console.log('📦 Decoding signature and reconstructing transaction...');
+
+			const executorClient = initializeHederaClient();
+			const userAccountId = AccountId.fromString(
+				signedTransaction.accountId || userAddress
+			);
+
+			let decodedSignatureMap;
+			let transaction;
+
+			try {
+				// Decode SignatureMap from wallet signature
+				if (signedTransaction.signatureMap) {
+					console.log('📦 Using signatureMap from wallet response');
+					if (typeof signedTransaction.signatureMap === 'string') {
+						const signatureMapBytes = Buffer.from(
+							signedTransaction.signatureMap,
+							'base64'
+						);
+						decodedSignatureMap =
+							proto.proto.SignatureMap.decode(signatureMapBytes);
+					} else {
+						decodedSignatureMap = signedTransaction.signatureMap;
+					}
+				} else {
+					console.log('📦 Decoding signature from base64 string');
+					const signatureMapBytes = Buffer.from(
+						signedTransaction.signature,
+						'base64'
+					);
+					decodedSignatureMap =
+						proto.proto.SignatureMap.decode(signatureMapBytes);
+				}
+
+				console.log('✅ Successfully decoded SignatureMap');
+
+				if (!decodedSignatureMap.sigPair?.length) {
+					throw new Error('No signature pairs found in wallet signature');
+				}
+
+				// Decode original transaction
+				let transactionBuffer;
+				if (Buffer.isBuffer(originalTransactionBytes)) {
+					transactionBuffer = originalTransactionBytes;
+				} else if (originalTransactionBytes instanceof Uint8Array) {
+					transactionBuffer = Buffer.from(originalTransactionBytes);
+				} else if (Array.isArray(originalTransactionBytes)) {
+					transactionBuffer = Buffer.from(originalTransactionBytes);
+				} else {
+					throw new Error('Invalid originalTransactionBytes type');
+				}
+
+				let originalSignedTransactionBytes;
+
+				// Try decoding as TransactionList first
+				try {
+					const originalTransactionList =
+						proto.proto.TransactionList.decode(transactionBuffer);
+					if (
+						originalTransactionList.transactionList &&
+						originalTransactionList.transactionList.length > 0
+					) {
+						originalSignedTransactionBytes =
+							originalTransactionList.transactionList[0];
+					}
+				} catch (listError) {
+					console.log('⚠️ Not a TransactionList, trying Transaction wrapper');
+				}
+
+				if (!originalSignedTransactionBytes) {
+					const originalTransactionProto =
+						proto.proto.Transaction.decode(transactionBuffer);
+					if (originalTransactionProto.signedTransactionBytes) {
+						originalSignedTransactionBytes =
+							originalTransactionProto.signedTransactionBytes;
+					} else if (originalTransactionProto.signedTransaction) {
+						originalSignedTransactionBytes =
+							proto.proto.SignedTransaction.encode(
+								originalTransactionProto.signedTransaction
+							).finish();
+					}
+				}
+
+				const normalizeToUint8Array = (data, context = 'root') => {
+					if (!data) throw new Error(`Missing data (${context})`);
+					if (data instanceof Uint8Array) return data;
+					if (Buffer.isBuffer(data)) return new Uint8Array(data);
+					if (typeof data === 'string')
+						return Uint8Array.from(Buffer.from(data, 'base64'));
+					if (Array.isArray(data)) return Uint8Array.from(data);
+					if (data.signedTransactionBytes !== undefined)
+						return normalizeToUint8Array(
+							data.signedTransactionBytes,
+							`${context}.signedTransactionBytes`
+						);
+					if (data.signedTransaction) {
+						return proto.proto.SignedTransaction.encode(
+							data.signedTransaction
+						).finish();
+					}
+					throw new Error('Unsupported data format');
+				};
+
+				const signedBytesForDecode = normalizeToUint8Array(
+					originalSignedTransactionBytes
+				);
+
+				// Get the signed transaction to extract TransactionBody
+				const originalSignedTransaction =
+					proto.proto.SignedTransaction.decode(signedBytesForDecode);
+
+				if (!originalSignedTransaction.bodyBytes) {
+					throw new Error('Transaction body bytes not found');
+				}
+
+				console.log('✅ Decoded original transaction body');
+
+				// Build new SignedTransaction with body + wallet signature
+				const newSignedTransaction = proto.proto.SignedTransaction.create({
+					bodyBytes: originalSignedTransaction.bodyBytes,
+					sigMap: decodedSignatureMap,
+				});
+
+				// Encode the SignedTransaction
+				const newSignedTxBytes =
+					proto.proto.SignedTransaction.encode(newSignedTransaction).finish();
+
+				// Wrap in Transaction proto
+				const transactionWrapper = proto.proto.Transaction.create({
+					signedTransactionBytes: newSignedTxBytes,
+				});
+				const transactionWrapperBytes =
+					proto.proto.Transaction.encode(transactionWrapper).finish();
+
+				// Deserialize as Transaction object
+				transaction = Transaction.fromBytes(transactionWrapperBytes);
+				console.log('✅ Transaction reconstructed from signature');
+
+				// Execute the signed transaction
+				console.log('📤 Submitting SBT mint transaction to Hedera network...');
+				const response = await transaction.execute(executorClient);
+
+				if (response.errorMessage) {
+					throw new Error(`Transaction failed: ${response.errorMessage}`);
+				}
+
+				const receipt = await response.getReceipt(executorClient);
+
+				if (receipt.status.toString() !== 'SUCCESS') {
+					throw new Error(`Transaction failed with status: ${receipt.status}`);
+				}
+
+				console.log('✅ SBT mint transaction executed successfully:', {
+					transactionId: response.transactionId.toString(),
+					gasUsed: receipt.gasUsed?.toNumber() || 0,
+					walletType: signedTransaction.walletType,
+					userAccountId: signedTransaction.accountId || userAddress,
+				});
+
+				return {
+					success: true,
+					transactionId: response.transactionId.toString(),
+					timestamp: Date.now(),
+					userAddress: userAddress,
+					receipt: {
+						status: receipt.status.toString(),
+						gasUsed: receipt.gasUsed?.toNumber() || 0,
+						contractId: receipt.contractId?.toString(),
+					},
+					walletType: signedTransaction.walletType,
+					isRealTransaction: true,
+					userAccountId: signedTransaction.accountId || userAddress,
+				};
+			} catch (reconstructError) {
+				console.error('❌ Failed to reconstruct signed transaction:', {
+					message: reconstructError.message,
+					stack: reconstructError.stack,
+				});
+				throw new Error(
+					`Could not reconstruct signed transaction: ${reconstructError.message}`
+				);
+			}
+		} catch (error) {
+			console.error('❌ Error executing signed SBT mint transaction:', error);
+			throw error;
+		}
+	}
+
+	/**
 	 * Check if the service is available
 	 * @returns {boolean} Is service available
 	 */

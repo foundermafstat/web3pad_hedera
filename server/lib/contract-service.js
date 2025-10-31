@@ -641,10 +641,19 @@ export class ContractService {
     }
 
     async getPlayerTokenIdRpc(playerAddress) {
-        const contract = this.getEthersContract('PlayerSBT');
-        const addr = this.validateAddress(playerAddress);
-        const result = await contract.getPlayerTokenId(addr);
-        return Number(result || 0);
+        try {
+            const contract = this.getEthersContract('PlayerSBT');
+            const addr = this.validateAddress(playerAddress);
+            const result = await contract.getPlayerTokenId(addr);
+            return Number(result || 0);
+        } catch (error) {
+            // Player doesn't have SBT token yet - this is normal
+            if (error.message?.includes('execution reverted') || error.code === 'CALL_EXCEPTION') {
+                console.log(`Player ${playerAddress} does not have an SBT token yet`);
+                return 0;
+            }
+            throw error;
+        }
     }
 
     async getTotalSBTsRpc() {

@@ -1,5 +1,6 @@
 import express from 'express';
 import { contractService } from '../lib/contract-service.js';
+import { transactionService } from '../lib/transaction-service.js';
 
 const router = express.Router();
 
@@ -200,7 +201,13 @@ router.get('/player-sbt/rpc/token-id/:address', async (req, res) => {
 		const tokenId = await contractService.getPlayerTokenIdRpc(
 			req.params.address
 		);
-		res.json({ success: true, data: { tokenId } });
+		res.json({ 
+			success: true, 
+			data: { 
+				tokenId,
+				hasSBT: tokenId > 0
+			} 
+		});
 	} catch (error) {
 		console.error('Error fetching token ID:', error);
 		res
@@ -530,6 +537,7 @@ router.post('/faucet/swap', async (req, res) => {
  * @route POST /api/contracts/player-sbt/mint
  * @desc Mint SBT for a user. Server must have GAME_SERVER_ROLE on PlayerSBT.
  * @access Public (expects userAddress in body)
+ * @deprecated Use /player-sbt/create-mint-transaction and /player-sbt/execute-mint instead
  */
 router.post('/player-sbt/mint', async (req, res) => {
 	try {
@@ -550,6 +558,81 @@ router.post('/player-sbt/mint', async (req, res) => {
 		res.status(500).json({
 			success: false,
 			error: error.message || 'Failed to mint Player SBT',
+		});
+	}
+});
+
+/**
+ * @route POST /api/contracts/player-sbt/create-mint-transaction
+ * @desc Create SBT mint transaction for user to sign with their wallet
+ * @access Public
+ */
+router.post('/player-sbt/create-mint-transaction', async (req, res) => {
+	try {
+		const { userAddress, tokenUri } = req.body || {};
+		if (!userAddress) {
+			return res
+				.status(400)
+				.json({ success: false, error: 'userAddress is required' });
+		}
+
+		// Check if user already has SBT
+		try {
+			const hasSBT = await contractService.hasSBT(userAddress);
+			if (hasSBT) {
+				return res.status(400).json({
+					success: false,
+					error: 'Player already has an SBT',
+				});
+			}
+		} catch (checkError) {
+			console.warn('Could not check if player has SBT:', checkError.message);
+		}
+
+		const result = await transactionService.createSBTMintTransaction(
+			userAddress,
+			tokenUri || 'ipfs://player-sbt-default'
+		);
+
+		res.json(result);
+	} catch (error) {
+		console.error('Error creating SBT mint transaction:', error);
+		res.status(500).json({
+			success: false,
+			error: error.message || 'Failed to create SBT mint transaction',
+		});
+	}
+});
+
+/**
+ * @route POST /api/contracts/player-sbt/execute-mint
+ * @desc Execute signed SBT mint transaction from user's wallet
+ * @access Public
+ */
+router.post('/player-sbt/execute-mint', async (req, res) => {
+	try {
+		const { signedTransaction, userAddress, originalTransactionBytes } =
+			req.body || {};
+
+		if (!signedTransaction || !userAddress) {
+			return res.status(400).json({
+				success: false,
+				error: 'signedTransaction and userAddress are required',
+			});
+		}
+
+		const result = await transactionService.executeSignedSBTMintTransaction(
+			signedTransaction,
+			userAddress,
+			originalTransactionBytes
+		);
+
+		res.json(result);
+	} catch (error) {
+		console.error('Error executing signed SBT mint transaction:', error);
+		res.status(500).json({
+			success: false,
+			error: error.message || 'Failed to execute SBT mint transaction',
 		});
 	}
 });
